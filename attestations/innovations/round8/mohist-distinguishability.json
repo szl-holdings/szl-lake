@@ -15,7 +15,7 @@
     "ts": "2026-06-03T14:14:00+00:00",
     "cycle": "round8-leader-scrape-plus-ancient-redecode",
     "slsa": "L1 honest",
-    "pr_url": "PENDING",
+    "pr_url": "https://github.com/szl-holdings/killinchu/pull/30",
     "receipt_hash": "633565bf80d38a6ffe88179a73fe582dde65eab2fa692758130e7ef27490130c",
     "signature": "PLACEHOLDER \u2014 Sigstore CI signing pending per Doctrine v11",
     "dco": {
