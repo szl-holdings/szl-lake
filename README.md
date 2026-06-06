@@ -20,8 +20,8 @@ The SZL Data Lake is the diligence-defensible corpus of governance receipts for 
 |---|---|
 | `attestations/` | Section 889, SLSA level, CMMC L1 self-attestation |
 | `doctrine/` | v11 snapshot (749 declarations · 14 axioms · 163 sorries) pinned to kernel commit `c7c0ba17` |
-| `keys/` | ECDSA P-256 cosign public keys per flagship |
-| `khipu/` | DSSE-signed Khipu receipts (Parquet / NDJSON, append-only) |
+| `keys/` | ECDSA P-256 cosign public keys per product |
+| `khipu/` | DSSE-signed Khipu receipts (NDJSON, append-only) |
 | `papers/` | Zenodo paper record references |
 | `sboms/` | CycloneDX SBOM pointers |
 | `trajectories/` | Bounded-recursion execution traces |
@@ -33,16 +33,17 @@ The SZL Data Lake is the diligence-defensible corpus of governance receipts for 
 ### 1 — Fetch receipts from HF (canonical source)
 
 ```bash
-# Pull a Khipu receipt parquet
+# Pull a Khipu receipt stream (NDJSON, one signed receipt per line)
 curl -fsSL \
-  "https://huggingface.co/datasets/SZLHOLDINGS/szl-lake/resolve/main/khipu/amaru_receipts.parquet" \
-  -o amaru_receipts.parquet
+  "https://huggingface.co/datasets/SZLHOLDINGS/szl-lake/resolve/main/khipu/a11oy_receipts.ndjson" \
+  -o a11oy_receipts.ndjson
 
-# Or read directly with Python
+# Or read the first receipt directly with Python
 python3 -c "
-import pyarrow.parquet as pq
-t = pq.read_table('hf://datasets/SZLHOLDINGS/szl-lake/khipu/amaru_receipts.parquet')
-print(t.to_pandas().head())
+import json, urllib.request
+url = 'https://huggingface.co/datasets/SZLHOLDINGS/szl-lake/resolve/main/khipu/a11oy_receipts.ndjson'
+r = json.loads(urllib.request.urlopen(url).readline())
+print(r['receipt_id'], r['dsse_keyid'])
 "
 ```
 
@@ -88,4 +89,4 @@ See [`lake_index.json`](lake_index.json) for the current pointer manifest (HF SH
 
 Data: [CC-BY-4.0](LICENSE) · Code/tooling: Apache-2.0
 
-<sub>Doctrine v11 LOCKED · 749 / 14 / 163 · Λ = Conjecture 1 (open, not a theorem) · SLSA L1 honest · Signed-off-by: Yachay (CTO) · Co-Authored-By: Perplexity Computer Agent</sub>
+<sub>Doctrine v11 LOCKED · 749 / 14 / 163 · Λ = Conjecture 1 (open, not a theorem) · SLSA L1 honest</sub>
