@@ -18,7 +18,7 @@ The SZL Data Lake is the diligence-defensible corpus of governance receipts for 
 
 | Directory | Contents |
 |---|---|
-| `attestations/` | Section 889, SLSA level, CMMC L1 self-attestation |
+| `attestations/` | Section 889 (5 vendors), SLSA L1-honest level record, supply-chain self-attestation (no FedRAMP / Iron Bank / CMMC claimed) |
 | `doctrine/` | v11 snapshot (749 declarations · 14 axioms · 163 sorries) pinned to kernel commit `c7c0ba17` |
 | `keys/` | ECDSA P-256 cosign public keys per product |
 | `khipu/` | DSSE-signed Khipu receipts (NDJSON, append-only) |
@@ -89,4 +89,4 @@ See [`lake_index.json`](lake_index.json) for the current pointer manifest (HF SH
 
 Data: [CC-BY-4.0](LICENSE) · Code/tooling: Apache-2.0
 
-<sub>Doctrine v11 LOCKED · 749 / 14 / 163 · Λ = Conjecture 1 (open, not a theorem) · SLSA L1 honest</sub>
+<sub>Doctrine v11 LOCKED · 749 / 14 / 163 · Λ = Conjecture 1 (open, not a theorem) · SLSA L1 honest · L2 verified-provenance on roadmap · no FedRAMP / Iron Bank / CMMC claimed</sub>
