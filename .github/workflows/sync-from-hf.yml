@@ -8,7 +8,7 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       # LOUD GUARD (no silent green): HF_TOKEN is REQUIRED to read the szl-lake
       # dataset. Without it every fetch 401s; the old `|| true` swallowed that
       # and committed a green no-op sync over stale/empty files.
