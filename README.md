@@ -74,7 +74,7 @@ curl -fsSL \
 
 - **Formal proofs**: [lutar-lean](https://github.com/szl-holdings/lutar-lean) — Lean 4 kernel at commit [`c7c0ba17`](https://github.com/szl-holdings/lutar-lean/commit/c7c0ba17)
 - **DOI**: [10.5281/zenodo.20434276](https://doi.org/10.5281/zenodo.20434276)
-- **Docs**: [docs.szlholdings.com/lake](https://docs.szlholdings.com/lake)
+- **Docs**: [docs.szlholdings.com/lake](https://szl-holdings.github.io/docs-site/lake)
 - **HF org**: [huggingface.co/SZLHOLDINGS](https://huggingface.co/SZLHOLDINGS)
 
 ---
