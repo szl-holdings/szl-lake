@@ -39,10 +39,10 @@
     },
     "hf_receipt": "datasets/SZLHOLDINGS/szl-lake :: khipu/lutar_lean_receipts.ndjson",
     "github_receipt": "data/khipu/lutar_lean_receipts.ndjson",
-    "snapshot_kernel_commit": "e736decd244ae06e8bb48531c6c7dc0f1029b25a",
-    "snapshot_kernel_commit_short": "e736decd244a",
-    "locked_doctrine_kernel_commit": "c7c0ba17",
-    "note": "Theorem U is a SEPARATE, REAL-conditional kernel snapshot at snapshot_kernel_commit; it is NOT part of the locked-proven baseline. The doctrine-locked kernel commit remains c7c0ba17 (see top-level kernel_commit)."
+    "note": "Theorem U is a SEPARATE, REAL-conditional kernel snapshot at snapshot_kernel_commit; it is NOT part of the locked-proven baseline. The doctrine-locked kernel commit remains c7c0ba17 (see top-level kernel_commit).",
+    "snapshot_commit": "e736decd244ae06e8bb48531c6c7dc0f1029b25a",
+    "snapshot_commit_short": "e736decd244a",
+    "locked_doctrine_commit": "c7c0ba17"
   },
   "theorem_u_anchored_at_utc": "2026-06-09T05:39:23Z"
 }
