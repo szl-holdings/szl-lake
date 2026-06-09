@@ -1,0 +1,299 @@
+# verify-anchor-receipts.yml — Continuously re-verify the anchored Theorem-U
+# receipt chain on BOTH szl-lake surfaces.
+#
+# The lutar-lean anchor (anchor-szl-lake.yml) signed a Theorem-U snapshot and
+# appended ONE Khipu receipt (chain_index 1) to szl-lake, verifying it once at
+# mint time. That proves signing worked the day it ran; it gives no ongoing
+# assurance that the anchor still verifies against the public Sigstore trust
+# root + Rekor transparency log, nor that the ledger has not been silently
+# truncated or re-ordered since.
+#
+# This scheduled monitor re-runs the SAME independent verification
+# (cosign verify-blob-attestation --new-bundle-format against the embedded
+# signing.bundle_b64, pinned to the Fulcio identity + OIDC issuer) for every
+# receipt in khipu/lutar_lean_receipts.ndjson, on the GitHub front-door copy AND
+# the HF canonical copy, plus chain continuity (prev_hash links + monotonic
+# chain_index) and per-receipt body tamper-evidence. If anything fails it fails
+# LOUDLY, raises a rolling incident issue, and pages the team via the shared
+# a11oy-uptime ntfy topic — the same alerting pattern used for the live receipt
+# chains (see a11oy/rekor-recheck.yml, release-receipt-verify.yml).
+#
+# HONESTY: this re-checks SIGNATURES + chain integrity only; the doctrine claim
+# is unchanged (Theorem U REAL-conditional; Conjecture 1 OPEN / machine-checked
+# FALSE — never asserted closed).
+#
+# Org policy: only github-owned / verified actions are allowed; cosign is the
+# pinned release binary verified by sha256 (no third-party action). Action SHAs
+# are pinned. Signed-off-by: Yachay <yachay@szlholdings.ai>
+
+name: Verify Anchor Receipts
+
+on:
+  schedule:
+    - cron: '37 6 * * *'  # daily at 06:37 UTC (offset from rekor-recheck 06:17 / release-verify 06:47)
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Manual trigger reason'
+        required: false
+        default: 'manual re-verify'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: verify-anchor-receipts
+  cancel-in-progress: false
+
+env:
+  COSIGN_VERSION: v2.4.1
+  COSIGN_SHA256: 8b24b946dd5809c6bd93de08033bcf6bc0ed7d336b7785787c080f574b89249b
+  GH_NDJSON: data/khipu/lutar_lean_receipts.ndjson
+  HF_NDJSON_URL: https://huggingface.co/datasets/SZLHOLDINGS/szl-lake/resolve/main/khipu/lutar_lean_receipts.ndjson
+  BASELINE_FILE: .github/verify-anchor-receipts-baseline.json
+
+jobs:
+  verify:
+    name: Re-verify anchored Theorem-U receipt chain (both surfaces)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      # cosign is the same tool the anchor used. Pin the release binary + verify
+      # its sha256 (org policy: no third-party actions for signing/verification).
+      - name: Install cosign (pinned + checksum-verified)
+        run: |
+          set -euo pipefail
+          url="https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+          curl -fsSL -o /tmp/cosign "$url"
+          echo "${COSIGN_SHA256}  /tmp/cosign" | sha256sum -c -
+          chmod +x /tmp/cosign
+          /tmp/cosign version
+
+      - name: Read baseline floor
+        id: baseline
+        run: |
+          set -euo pipefail
+          min=$(python3 -c "import json;print(json.load(open('${BASELINE_FILE}')).get('min_receipts',0))" 2>/dev/null || echo 0)
+          echo "min_receipts=${min}" >> "$GITHUB_OUTPUT"
+          echo "Baseline floor: ${min} receipt(s)"
+
+      # ---- Surface 1: GitHub front-door (the checked-out copy) -------------- #
+      - name: Verify GitHub front-door surface
+        id: gh
+        run: |
+          set +e
+          COSIGN_BIN=/tmp/cosign python3 scripts/verify_lutar_lean_receipts.py \
+            --ndjson "${GH_NDJSON}" \
+            --surface github-front-door \
+            --min-expected "${{ steps.baseline.outputs.min_receipts }}" \
+            --summary-out /tmp/summary-github.json \
+            | tee /tmp/gh.out
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      # ---- Surface 2: HF canonical dataset --------------------------------- #
+      # HF_TOKEN is REQUIRED to read the dataset (the same loud guard as
+      # sync-from-hf.yml). Without it the fetch 401s; we fail loudly rather than
+      # silently skipping the canonical surface.
+      - name: Require HF_TOKEN (fail loudly if missing)
+        if: ${{ secrets.HF_TOKEN == '' }}
+        run: |
+          echo "::error title=HF_TOKEN missing::verify-anchor-receipts needs HF_TOKEN to read the canonical SZLHOLDINGS/szl-lake dataset surface."
+          echo "::error::Founder action required: add the org/repo secret HF_TOKEN (HF read token for the SZLHOLDINGS org)."
+          exit 1
+
+      - name: Verify HF canonical surface
+        id: hf
+        if: ${{ secrets.HF_TOKEN != '' }}
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set +e
+          # No `|| true`: a failed fetch must fail loudly, never verify stale/empty.
+          curl -fsSL -H "Authorization: Bearer ${HF_TOKEN}" "${HF_NDJSON_URL}" -o /tmp/hf_receipts.ndjson
+          if [ $? -ne 0 ] || [ ! -s /tmp/hf_receipts.ndjson ]; then
+            echo "::error::Could not fetch the canonical HF szl-lake receipt ledger — refusing to pass."
+            echo "exit_code=2" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          COSIGN_BIN=/tmp/cosign python3 scripts/verify_lutar_lean_receipts.py \
+            --ndjson /tmp/hf_receipts.ndjson \
+            --surface hf-canonical \
+            --min-expected "${{ steps.baseline.outputs.min_receipts }}" \
+            --summary-out /tmp/summary-hf.json \
+            | tee /tmp/hf.out
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Aggregate results
+        id: agg
+        if: always()
+        run: |
+          set -euo pipefail
+          gh_code="${{ steps.gh.outputs.exit_code }}"
+          hf_code="${{ steps.hf.outputs.exit_code }}"
+          gh_code="${gh_code:-2}"
+          hf_code="${hf_code:-2}"
+          echo "gh_code=${gh_code}" >> "$GITHUB_OUTPUT"
+          echo "hf_code=${hf_code}" >> "$GITHUB_OUTPUT"
+
+          overall=0
+          [ "${gh_code}" != "0" ] && overall=1
+          [ "${hf_code}" != "0" ] && overall=1
+          echo "overall=${overall}" >> "$GITHUB_OUTPUT"
+
+          # Build a per-surface failing-reason list for the direct alert.
+          {
+            echo "failed_lines<<__VAR_EOF__"
+            for s in github hf; do
+              f="/tmp/summary-${s}.json"
+              if [ -f "$f" ]; then
+                python3 -c "import json,sys; d=json.load(open('$f')); rows=[r for r in d.get('results',[]) if r.get('status')=='FAIL']; [print('- ['+d['surface']+'] receipt #'+str(r.get('index'))+': '+r.get('reason','')) for r in rows]; [print('- ['+d['surface']+'] chain: '+e) for e in d.get('chain_errors',[])]; (not d.get('baseline_ok',True)) and print('- ['+d['surface']+'] ledger regressed below baseline floor ('+str(d.get('checked'))+' < '+str(d.get('min_expected'))+')')"
+              fi
+            done
+            # Cover a surface that errored before producing a summary.
+            [ "${gh_code}" = "2" ] && [ ! -f /tmp/summary-github.json ] && echo "- [github-front-door] verifier/tooling error before a per-receipt breakdown"
+            [ "${hf_code}" = "2" ] && [ ! -f /tmp/summary-hf.json ] && echo "- [hf-canonical] fetch or verifier error before a per-receipt breakdown"
+            echo "__VAR_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+          gh_checked=$(python3 -c "import json;print(json.load(open('/tmp/summary-github.json'))['checked'])" 2>/dev/null || echo '?')
+          hf_checked=$(python3 -c "import json;print(json.load(open('/tmp/summary-hf.json'))['checked'])" 2>/dev/null || echo '?')
+          {
+            echo "## Anchored receipt re-verification"
+            echo ""
+            echo "| Surface | exit | receipts |"
+            echo "|---------|------|----------|"
+            echo "| GitHub front-door | ${gh_code} | ${gh_checked} |"
+            echo "| HF canonical | ${hf_code} | ${hf_checked} |"
+            echo ""
+            echo '```'
+            cat /tmp/gh.out 2>/dev/null || true
+            echo ""
+            cat /tmp/hf.out 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload verification summaries
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: verify-anchor-receipts-summary
+          path: |
+            /tmp/summary-github.json
+            /tmp/summary-hf.json
+          if-no-files-found: ignore
+
+      - name: Reconcile rolling verification incident issue
+        id: incident
+        if: always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          OVERALL: ${{ steps.agg.outputs.overall }}
+          GH_CODE: ${{ steps.agg.outputs.gh_code }}
+          HF_CODE: ${{ steps.agg.outputs.hf_code }}
+        with:
+          script: |
+            const failed = String(process.env.OVERALL || '0') === '1';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const marker = '<!-- verify-anchor-receipts-incident -->';
+            const q = `repo:${context.repo.owner}/${context.repo.repo} in:body "${marker}" label:verify-anchor-receipts`;
+            const res = await github.rest.search.issuesAndPullRequests({ q, sort: 'created', order: 'desc', per_page: 5 });
+            const existing = res.data.items.find(i => !i.pull_request) || null;
+            const stats = `gh_exit=${process.env.GH_CODE} hf_exit=${process.env.HF_CODE}`;
+            const now = new Date().toISOString();
+
+            if (failed) {
+              const body = `## Anchored Receipt Verification Incident\n\n${marker}\n` +
+                `**State:** FAILING\n**Detected:** ${now}\n**Run:** ${runUrl}\n\n` +
+                `The anchored Theorem-U receipt chain in szl-lake no longer verifies ` +
+                `on at least one surface (cosign attestation, chain continuity, or ` +
+                `body tamper-evidence). \`${stats}\`\n\n` +
+                `See the run summary for the per-surface / per-receipt breakdown. ` +
+                `This is a single rolling incident; it updates in place and ` +
+                `auto-closes on recovery.`;
+              let incident = existing;
+              if (existing) {
+                if (existing.state === 'closed') {
+                  await github.rest.issues.update({ owner: context.repo.owner, repo: context.repo.repo, issue_number: existing.number, state: 'open' });
+                }
+                await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: existing.number,
+                  body: `Still FAILING as of ${now}.\n\n\`${stats}\`\nRun: ${runUrl}` });
+              } else {
+                const created = await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo,
+                  title: '[ANCHOR] szl-lake Theorem-U receipt chain no longer verifies', body, labels: ['verify-anchor-receipts', 'incident'] });
+                incident = created.data;
+              }
+              if (incident) {
+                core.setOutput('issue_number', String(incident.number));
+                core.setOutput('issue_url', incident.html_url);
+              }
+            } else if (existing && existing.state === 'open') {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: existing.number,
+                body: `Recovered: the anchored receipt chain verifies on both surfaces again as of ${now}.\n\n\`${stats}\`\nAuto-closing this rolling incident.\nRun: ${runUrl}` });
+              await github.rest.issues.update({ owner: context.repo.owner, repo: context.repo.repo, issue_number: existing.number, state: 'closed' });
+            }
+
+      # Direct push notification to the shared a11oy-uptime ntfy topic so a
+      # silently-broken anchor is paged immediately, not just buried in a red run
+      # / rolling issue. Fires ONLY on failure; the all-pass path sends nothing.
+      # Posts to a Slack-compatible incoming webhook (the org's SLACK_WEBHOOK_URL
+      # points at the a11oy-uptime ntfy topic / relay) via curl — no third-party
+      # action. If the secret is unset it logs a notice and soft-skips; the red
+      # run + incident issue still stand.
+      - name: Alert the team on verification failure
+        if: ${{ always() && steps.agg.outputs.overall == '1' }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ISSUE_URL: ${{ steps.incident.outputs.issue_url }}
+          ISSUE_NUMBER: ${{ steps.incident.outputs.issue_number }}
+          REPO: ${{ github.repository }}
+          GH_CODE: ${{ steps.agg.outputs.gh_code }}
+          HF_CODE: ${{ steps.agg.outputs.hf_code }}
+          FAILED_LINES: ${{ steps.agg.outputs.failed_lines }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
+            echo "::warning::SLACK_WEBHOOK_URL secret not configured — skipping direct alert. The failed run and the rolling verify-anchor-receipts incident issue still stand."
+            exit 0
+          fi
+          if [ -n "${ISSUE_URL}" ]; then
+            issue_line="Incident issue: #${ISSUE_NUMBER} ${ISSUE_URL}"
+          else
+            issue_line="Incident issue: (could not be resolved this run)"
+          fi
+          lines="${FAILED_LINES}"
+          if [ -z "${lines}" ]; then
+            lines="(verifier errored before a per-receipt breakdown was produced)"
+          fi
+          text=":rotating_light: *szl-lake anchored receipt re-verify FAILED* — the Theorem-U anchor no longer verifies in ${REPO}.
+          *Surface exits:* github-front-door=${GH_CODE} hf-canonical=${HF_CODE} (0=ok)
+          *Failure(s):*
+          ${lines}
+          *Failing run:* ${RUN_URL}
+          *${issue_line}*"
+          payload=$(jq -n --arg text "$text" '{text: $text}')
+          echo "Posting anchor-verification-failure alert to webhook..."
+          code=$(curl -sS -o /tmp/alert_resp.txt -w '%{http_code}' \
+                   -X POST -H 'Content-Type: application/json' \
+                   --max-time 20 --data "${payload}" "${SLACK_WEBHOOK_URL}")
+          echo "Webhook responded HTTP ${code}."
+          if [ "${code}" -lt 200 ] || [ "${code}" -ge 300 ]; then
+            echo "::error::Direct alert webhook POST failed (HTTP ${code}): $(cat /tmp/alert_resp.txt)"
+            exit 1
+          fi
+          echo "Direct alert delivered."
+
+      - name: Fail the run if the anchor no longer verifies
+        if: always()
+        run: |
+          if [ "${{ steps.agg.outputs.overall }}" = "1" ]; then
+            echo "::error::The anchored Theorem-U receipt chain no longer verifies (gh_exit=${{ steps.agg.outputs.gh_code }} hf_exit=${{ steps.agg.outputs.hf_code }})."
+            exit 1
+          fi
+          echo "Anchored receipt chain verifies on both surfaces."
