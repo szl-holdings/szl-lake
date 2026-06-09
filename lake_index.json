@@ -6,6 +6,41 @@
   "axioms": 14,
   "sorries": 163,
   "doi": "10.5281/zenodo.20434276",
-  "dirs": ["attestations", "doctrine", "keys", "khipu", "papers", "sboms", "trajectories"],
-  "synced_from_hf_at": "2026-06-03T00:41:56Z"
+  "dirs": [
+    "attestations",
+    "doctrine",
+    "keys",
+    "khipu",
+    "papers",
+    "sboms",
+    "trajectories"
+  ],
+  "synced_from_hf_at": "2026-06-03T00:41:56Z",
+  "theorem_u_anchor": {
+    "kernel_commit": "e736decd244ae06e8bb48531c6c7dc0f1029b25a",
+    "kernel_commit_short": "e736decd244a",
+    "chain_index": 1,
+    "receipt_id": "d70f444db57df9a4a2d52e69408ce61b511e4b50152f7fbf97456b1af66fe9a0",
+    "snapshot_sha256": "82d08a4e892579e815d880d51f61cb8035a3325e077c29e412f310f76b50985e",
+    "verified_run_url": "https://github.com/szl-holdings/lutar-lean/actions/runs/27186151340",
+    "status": "REAL-conditional (Theorem U); Conjecture 1 OPEN / machine-checked FALSE",
+    "doctrine": "v11",
+    "headline_decls": [
+      "CorollaryU1_LambdaUnique_Separable",
+      "CorollaryU2_LambdaUnique_Factors",
+      "TheoremU_LambdaUnique",
+      "TheoremU_LambdaUnique_eq",
+      "identifiability_forces_lambda",
+      "lambda_equiv_to_eq_of_anchored"
+    ],
+    "signing": {
+      "mode": "cosign-keyless-oidc",
+      "fulcio_identity": "https://github.com/szl-holdings/lutar-lean/.github/workflows/anchor-szl-lake.yml@refs/heads/main",
+      "oidc_issuer": "https://token.actions.githubusercontent.com",
+      "rekor_log_index": "1762934067"
+    },
+    "hf_receipt": "datasets/SZLHOLDINGS/szl-lake :: khipu/lutar_lean_receipts.ndjson",
+    "github_receipt": "data/khipu/lutar_lean_receipts.ndjson"
+  },
+  "theorem_u_anchored_at_utc": "2026-06-09T05:39:23Z"
 }
