@@ -17,8 +17,6 @@
   ],
   "synced_from_hf_at": "2026-06-03T00:41:56Z",
   "theorem_u_anchor": {
-    "kernel_commit": "e736decd244ae06e8bb48531c6c7dc0f1029b25a",
-    "kernel_commit_short": "e736decd244a",
     "chain_index": 1,
     "receipt_id": "d70f444db57df9a4a2d52e69408ce61b511e4b50152f7fbf97456b1af66fe9a0",
     "snapshot_sha256": "82d08a4e892579e815d880d51f61cb8035a3325e077c29e412f310f76b50985e",
@@ -40,7 +38,11 @@
       "rekor_log_index": "1762934067"
     },
     "hf_receipt": "datasets/SZLHOLDINGS/szl-lake :: khipu/lutar_lean_receipts.ndjson",
-    "github_receipt": "data/khipu/lutar_lean_receipts.ndjson"
+    "github_receipt": "data/khipu/lutar_lean_receipts.ndjson",
+    "snapshot_kernel_commit": "e736decd244ae06e8bb48531c6c7dc0f1029b25a",
+    "snapshot_kernel_commit_short": "e736decd244a",
+    "locked_doctrine_kernel_commit": "c7c0ba17",
+    "note": "Theorem U is a SEPARATE, REAL-conditional kernel snapshot at snapshot_kernel_commit; it is NOT part of the locked-proven baseline. The doctrine-locked kernel commit remains c7c0ba17 (see top-level kernel_commit)."
   },
   "theorem_u_anchored_at_utc": "2026-06-09T05:39:23Z"
 }
