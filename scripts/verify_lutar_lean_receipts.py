@@ -54,13 +54,26 @@ import sys
 import tempfile
 
 SCHEMA = "szl.khipu.receipt/v1"
-# Receipt kinds anchored into this ledger. theorem-u-anchor is the original
-# proof-milestone anchor; conjecture-disclosure-anchor is the Conjecture
-# Factory disclosure. Each receipt is still verified against its OWN embedded
-# signing.predicate_type / Fulcio identity below — this allowlist only gates
-# which receipt kinds may appear in the chain, and deliberately rejects any
-# unknown kind rather than waving it through.
-ALLOWED_KINDS = ("theorem-u-anchor", "conjecture-disclosure-anchor")
+# Receipt kinds anchored into this ledger:
+#   theorem-u-anchor       — the original proof-milestone anchor (chain #1).
+#   conjecture-disclosure  — Conjecture Factory disclosure (chain #2). NOTE the
+#                            on-chain kind is the bare 'conjecture-disclosure';
+#                            its signing.predicate_type is the '/v1'-suffixed URI.
+#   locked-baseline        — Doctrine-v11 locked-proven baseline anchor (chain
+#                            #3, added with the 5->8 lock growth on 2026-06-10):
+#                            anchors the kernel meta-invariants locked_count_eight,
+#                            conjecture1_still_open, theoremU_excluded_from_locked.
+# Each receipt is still verified against its OWN embedded signing.predicate_type /
+# Fulcio identity below — this allowlist only gates which receipt KINDS may appear
+# in the chain, and deliberately rejects any unknown kind rather than waving it
+# through. (We also keep the legacy '-anchor' aliases for forward-compatibility.)
+ALLOWED_KINDS = (
+    "theorem-u-anchor",
+    "conjecture-disclosure",
+    "conjecture-disclosure-anchor",
+    "locked-baseline",
+    "locked-baseline-anchor",
+)
 GH_OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 
 

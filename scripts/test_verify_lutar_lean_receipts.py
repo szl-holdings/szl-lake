@@ -177,6 +177,17 @@ def main() -> int:
         return [rec], 1
     cases.append(("valid_conjecture_kind", valid_conjecture_kind, False))
 
+    # VALID LOCKED-BASELINE KIND — the Doctrine-v11 locked-proven baseline anchor
+    # (chain #3, added with the 5->8 lock growth on 2026-06-10). Relabel the
+    # genuine receipt and recompute receipt_id; with cosign stubbed this must
+    # PASS (exit 0): the ledger legitimately carries this third receipt kind.
+    def valid_locked_baseline_kind(g):
+        rec = copy.deepcopy(g)
+        rec["kind"] = "locked-baseline"
+        rec = recompute_receipt_id(rec)
+        return [rec], 1
+    cases.append(("valid_locked_baseline_kind", valid_locked_baseline_kind, False))
+
     # UNKNOWN KIND — an out-of-allowlist kind must still be REJECTED (exit
     # non-zero), so the kind allowlist can never be silently widened to wave any
     # arbitrary receipt through.
