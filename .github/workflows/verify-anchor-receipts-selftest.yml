@@ -1,0 +1,67 @@
+# verify-anchor-receipts-selftest.yml — keep the receipt verifier honest.
+#
+# scripts/verify_lutar_lean_receipts.py is the safety net that catches a
+# tampered or truncated Theorem-U proof ledger (run on a schedule by
+# verify-anchor-receipts.yml). A safety net with no test of its own can be
+# silently weakened — an edit that stops detecting a body edit, or that always
+# returns "OK" — and the scheduled monitor would still go green while protecting
+# nothing.
+#
+# This guard runs the negative-fixture self-test (the same pattern as the org's
+# box-script alarm guards): it feeds the verifier crafted fixtures — a tampered
+# snapshot, a flipped receipt_id, a broken prev_hash chain, and a below-baseline
+# ledger — and asserts each makes the verifier exit non-zero, while a clean
+# fixture exits 0. It runs on every change to the verifier or its test so a
+# weakening is caught BEFORE merge, not silently in production.
+#
+# The cosign signature path is exercised for real by verify-anchor-receipts.yml
+# against the live Sigstore trust root; here cosign is stubbed so the self-test
+# isolates the integrity / chain-continuity / append-only-floor logic offline
+# (stdlib + Python only, no network, no signing material).
+#
+# Org policy: only github-owned / verified actions, pinned by commit SHA.
+# Signed-off-by: Yachay <yachay@szlholdings.ai>
+
+name: Verify Anchor Receipts (self-test)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/verify_lutar_lean_receipts.py'
+      - 'scripts/test_verify_lutar_lean_receipts.py'
+      - '.github/workflows/verify-anchor-receipts-selftest.yml'
+  pull_request:
+    paths:
+      - 'scripts/verify_lutar_lean_receipts.py'
+      - 'scripts/test_verify_lutar_lean_receipts.py'
+      - '.github/workflows/verify-anchor-receipts-selftest.yml'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Manual trigger reason'
+        required: false
+        default: 'manual self-test'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-anchor-receipts-selftest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  selftest:
+    name: Negative-fixture self-test of the receipt verifier
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Run verifier negative-fixture self-test
+        run: |
+          set -euo pipefail
+          python3 scripts/test_verify_lutar_lean_receipts.py
