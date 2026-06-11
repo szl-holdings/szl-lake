@@ -68,30 +68,63 @@
       "hf_receipt": "datasets/SZLHOLDINGS/szl-lake :: khipu/lutar_lean_receipts.ndjson",
       "github_receipt": "data/khipu/lutar_lean_receipts.ndjson",
       "anchored_at_utc": "2026-06-11T01:54:29Z"
+    },
+    "locked-baseline": {
+      "kind": "locked-baseline",
+      "title": "Locked-proven baseline (Doctrine v11) — kernel meta-invariants",
+      "status": "REAL-invariant",
+      "kernel_commit": "25e0b2af781f5fb10324945ea10c861bcc28cc83",
+      "kernel_commit_short": "25e0b2af781f",
+      "chain_index": 3,
+      "receipt_id": "dcdad01763241e4d7af6b45e59949e6596c12ccf43ed6b784471c1f05b4715c0",
+      "snapshot_sha256": "19ea5946195f7437cfb881eb5489898d0d45f5f074dfa210c22eb6c8bbfc3bc9",
+      "verified_run_url": "https://github.com/szl-holdings/lutar-lean/actions/runs/27319352318",
+      "doctrine": "v11",
+      "headline_decls": [
+        "conjecture1_still_open",
+        "locked_count_eight",
+        "theoremU_axiom_sets_kernel_only",
+        "theoremU_excluded_from_locked"
+      ],
+      "signing": {
+        "mode": "cosign-keyless-oidc",
+        "predicate_type": "https://szl-holdings/locked-baseline-anchor/v1",
+        "fulcio_identity": "https://github.com/szl-holdings/lutar-lean/.github/workflows/anchor-szl-lake.yml@refs/heads/main",
+        "oidc_issuer": "https://token.actions.githubusercontent.com",
+        "rekor_log_index": "1786432266"
+      },
+      "hf_receipt": "datasets/SZLHOLDINGS/szl-lake :: khipu/lutar_lean_receipts.ndjson",
+      "github_receipt": "data/khipu/lutar_lean_receipts.ndjson",
+      "anchored_at_utc": "2026-06-11T02:20:22Z"
     }
   },
   "latest_anchor": {
-    "kind": "conjecture-disclosure",
-    "title": "SZL mixing-map convergence conjecture",
-    "status": "OPEN",
-    "kernel_commit": "d851aefe86b9f12f9d4423200bd9e5257d05c41e",
-    "kernel_commit_short": "d851aefe86b9",
-    "chain_index": 2,
-    "receipt_id": "08744b67b647039f87abbf0b29587638ae777308ca7fc2434ed3ae4033687b50",
-    "snapshot_sha256": "7faded7df9ac5bea4ca7ddaa1e5c38c247c237fd49b8a1a39d35a260c2189fb0",
-    "verified_run_url": "https://github.com/szl-holdings/lutar-lean/actions/runs/27318564784",
+    "kind": "locked-baseline",
+    "title": "Locked-proven baseline (Doctrine v11) — kernel meta-invariants",
+    "status": "REAL-invariant",
+    "kernel_commit": "25e0b2af781f5fb10324945ea10c861bcc28cc83",
+    "kernel_commit_short": "25e0b2af781f",
+    "chain_index": 3,
+    "receipt_id": "dcdad01763241e4d7af6b45e59949e6596c12ccf43ed6b784471c1f05b4715c0",
+    "snapshot_sha256": "19ea5946195f7437cfb881eb5489898d0d45f5f074dfa210c22eb6c8bbfc3bc9",
+    "verified_run_url": "https://github.com/szl-holdings/lutar-lean/actions/runs/27319352318",
     "doctrine": "v11",
-    "headline_decls": [],
+    "headline_decls": [
+      "conjecture1_still_open",
+      "locked_count_eight",
+      "theoremU_axiom_sets_kernel_only",
+      "theoremU_excluded_from_locked"
+    ],
     "signing": {
       "mode": "cosign-keyless-oidc",
-      "predicate_type": "https://szl-holdings/conjecture-disclosure/v1",
-      "fulcio_identity": "https://github.com/szl-holdings/lutar-lean/.github/workflows/conjecture-factory.yml@refs/heads/main",
+      "predicate_type": "https://szl-holdings/locked-baseline-anchor/v1",
+      "fulcio_identity": "https://github.com/szl-holdings/lutar-lean/.github/workflows/anchor-szl-lake.yml@refs/heads/main",
       "oidc_issuer": "https://token.actions.githubusercontent.com",
-      "rekor_log_index": "1786272437"
+      "rekor_log_index": "1786432266"
     },
     "hf_receipt": "datasets/SZLHOLDINGS/szl-lake :: khipu/lutar_lean_receipts.ndjson",
     "github_receipt": "data/khipu/lutar_lean_receipts.ndjson",
-    "anchored_at_utc": "2026-06-11T01:54:29Z"
+    "anchored_at_utc": "2026-06-11T02:20:22Z"
   },
-  "latest_anchored_at_utc": "2026-06-11T01:54:29Z"
+  "latest_anchored_at_utc": "2026-06-11T02:20:22Z"
 }
