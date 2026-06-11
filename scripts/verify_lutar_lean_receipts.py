@@ -54,7 +54,13 @@ import sys
 import tempfile
 
 SCHEMA = "szl.khipu.receipt/v1"
-KIND = "theorem-u-anchor"
+# Receipt kinds anchored into this ledger. theorem-u-anchor is the original
+# proof-milestone anchor; conjecture-disclosure-anchor is the Conjecture
+# Factory disclosure. Each receipt is still verified against its OWN embedded
+# signing.predicate_type / Fulcio identity below — this allowlist only gates
+# which receipt kinds may appear in the chain, and deliberately rejects any
+# unknown kind rather than waving it through.
+ALLOWED_KINDS = ("theorem-u-anchor", "conjecture-disclosure-anchor")
 GH_OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 
 
@@ -129,8 +135,8 @@ def verify_receipt(rec: dict, idx: int, cosign_bin: str, tmpdir: str):
 
     if rec.get("schema") != SCHEMA:
         return fail(f"unexpected schema {rec.get('schema')!r} (want {SCHEMA})")
-    if rec.get("kind") != KIND:
-        return fail(f"unexpected kind {rec.get('kind')!r} (want {KIND})")
+    if rec.get("kind") not in ALLOWED_KINDS:
+        return fail(f"unexpected kind {rec.get('kind')!r} (want one of {ALLOWED_KINDS})")
 
     # (3) body tamper-evidence — recompute receipt_id over the body.
     stored_id = rec.get("receipt_id")

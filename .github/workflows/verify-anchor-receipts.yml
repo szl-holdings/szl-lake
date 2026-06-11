@@ -117,7 +117,7 @@ jobs:
         run: |
           set +e
           # No `|| true`: a failed fetch must fail loudly, never verify stale/empty.
-          curl -fsSL -H "Authorization: Bearer ${HF_TOKEN}" "${HF_NDJSON_URL}" -o /tmp/hf_receipts.ndjson
+          curl -fsSL --retry 5 --retry-delay 4 --retry-all-errors -H "Authorization: Bearer ${HF_TOKEN}" "${HF_NDJSON_URL}" -o /tmp/hf_receipts.ndjson
           if [ $? -ne 0 ] || [ ! -s /tmp/hf_receipts.ndjson ]; then
             echo "::error::Could not fetch the canonical HF szl-lake receipt ledger — refusing to pass."
             echo "exit_code=2" >> "$GITHUB_OUTPUT"

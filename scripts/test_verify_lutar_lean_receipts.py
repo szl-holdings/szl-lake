@@ -166,6 +166,27 @@ def main() -> int:
         return [g], 2
     cases.append(("below_baseline", below_baseline, True))
 
+    # VALID CONJECTURE KIND — relabel the genuine receipt as a
+    # conjecture-disclosure-anchor and recompute receipt_id so the body stays
+    # self-consistent. With cosign stubbed this must still PASS (exit 0): the
+    # ledger legitimately carries this second receipt kind.
+    def valid_conjecture_kind(g):
+        rec = copy.deepcopy(g)
+        rec["kind"] = "conjecture-disclosure-anchor"
+        rec = recompute_receipt_id(rec)
+        return [rec], 1
+    cases.append(("valid_conjecture_kind", valid_conjecture_kind, False))
+
+    # UNKNOWN KIND — an out-of-allowlist kind must still be REJECTED (exit
+    # non-zero), so the kind allowlist can never be silently widened to wave any
+    # arbitrary receipt through.
+    def unknown_kind(g):
+        rec = copy.deepcopy(g)
+        rec["kind"] = "bogus-not-an-anchor"
+        rec = recompute_receipt_id(rec)
+        return [rec], 1
+    cases.append(("unknown_kind", unknown_kind, True))
+
     failures = []
     with tempfile.TemporaryDirectory() as tmpdir:
         cosign_bin = make_cosign_stub(tmpdir)
