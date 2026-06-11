@@ -58,6 +58,8 @@ jobs:
     name: Re-verify anchored Theorem-U receipt chain (both surfaces)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -101,7 +103,7 @@ jobs:
       # sync-from-hf.yml). Without it the fetch 401s; we fail loudly rather than
       # silently skipping the canonical surface.
       - name: Require HF_TOKEN (fail loudly if missing)
-        if: ${{ secrets.HF_TOKEN == '' }}
+        if: ${{ env.HF_TOKEN == '' }}
         run: |
           echo "::error title=HF_TOKEN missing::verify-anchor-receipts needs HF_TOKEN to read the canonical SZLHOLDINGS/szl-lake dataset surface."
           echo "::error::Founder action required: add the org/repo secret HF_TOKEN (HF read token for the SZLHOLDINGS org)."
@@ -109,7 +111,7 @@ jobs:
 
       - name: Verify HF canonical surface
         id: hf
-        if: ${{ secrets.HF_TOKEN != '' }}
+        if: ${{ env.HF_TOKEN != '' }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
