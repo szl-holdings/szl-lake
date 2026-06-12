@@ -8,22 +8,24 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    # secrets context is NOT available in step-level `if:` or top-level env —
+    # map it through job-level env first, then gate on env.HF_TOKEN.
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       # LOUD GUARD (no silent green): HF_TOKEN is REQUIRED to read the szl-lake
       # dataset. Without it every fetch 401s; the old `|| true` swallowed that
       # and committed a green no-op sync over stale/empty files.
       - name: Require HF_TOKEN (fail loudly if missing)
-        if: ${{ secrets.HF_TOKEN == '' }}
+        if: ${{ env.HF_TOKEN == '' }}
         run: |
           echo "::error title=HF_TOKEN missing::sync-from-hf needs HF_TOKEN to read SZLHOLDINGS/szl-lake."
           echo "::error::Founder action required: add the org/repo secret HF_TOKEN (HF read token for the SZLHOLDINGS org)."
           echo "::error::Create it at https://huggingface.co/settings/tokens . See FOUNDER_SECRETS_RUNBOOK.md."
           exit 1
       - name: Pull HF dataset metadata + small JSONs
-        if: ${{ secrets.HF_TOKEN != '' }}
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        if: ${{ env.HF_TOKEN != '' }}
         run: |
           set -euo pipefail
           if [ -z "${HF_TOKEN:-}" ]; then
@@ -52,7 +54,7 @@ jobs:
             '.hf_sha=$sha | .synced_from_hf_at=$ts' \
             lake_index.json > lake_index.json.tmp && mv lake_index.json.tmp lake_index.json
       - name: Open/refresh PR if changed
-        if: ${{ secrets.HF_TOKEN != '' }}
+        if: ${{ env.HF_TOKEN != '' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
