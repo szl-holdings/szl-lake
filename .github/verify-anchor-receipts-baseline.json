@@ -1,4 +1,4 @@
 {
-  "_comment": "Append-only floor for the Theorem-U anchor ledger (khipu/lutar_lean_receipts.ndjson). The chain only ever grows; verify-anchor-receipts.yml fails LOUDLY if either surface drops below this many receipts, so a wiped or truncated ledger can never pass green with 'nothing to check'. Raise this when a new receipt is anchored (chain_index N => min_receipts N).",
+  "_comment": "Append-only floor for the anchor ledger (khipu/lutar_lean_receipts.ndjson). verify-anchor-receipts.yml fails LOUDLY if either surface drops below this many receipts, so a wiped or truncated ledger can never pass green with 'nothing to check'. AUTO-MAINTAINED: lutar-lean's anchor_szl_lake.py raises this to the new chain length in the SAME signed commit that appends a receipt (chain_index N => min_receipts N); never lowered.",
   "min_receipts": 2
 }
