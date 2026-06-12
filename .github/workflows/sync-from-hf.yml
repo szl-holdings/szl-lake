@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  pull-requests: write
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -50,16 +51,27 @@ jobs:
           jq --arg sha "$HF_SHA" --arg ts "$(date -u +%FT%TZ)" \
             '.hf_sha=$sha | .synced_from_hf_at=$ts' \
             lake_index.json > lake_index.json.tmp && mv lake_index.json.tmp lake_index.json
-      - name: Commit if changed
+      - name: Open/refresh PR if changed
         if: ${{ secrets.HF_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # main is branch-protected (DCO + Scorecard required), so a direct bot
+          # push is rejected (GH013). Push to a branch and open/refresh a PR with
+          # best-effort auto-merge instead. No-op when nothing changed.
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "No HF drift; nothing to sync."; exit 0
+          fi
+          BR="chore/hf-sync"
           git config user.email "yachay@szlholdings.ai"
           git config user.name "Yachay"
-          if [[ -n "$(git status --porcelain)" ]]; then
-            git add -A
-            git commit -m "chore(lake): sync from HF $(date -u +%FT%TZ)
-
-Signed-off-by: Yachay <yachay@szlholdings.ai>
-Co-Authored-By: Perplexity Computer Agent <agent@perplexity.ai>"
-            git push
+          git checkout -B "$BR"
+          git add -A
+          git commit -s -m "chore(lake): sync from HF $(date -u +%FT%TZ)" -m "Co-Authored-By: Perplexity Computer Agent <agent@perplexity.ai>"
+          git push -f origin "$BR"
+          if ! gh pr view "$BR" --json number >/dev/null 2>&1; then
+            gh pr create --base main --head "$BR" \
+              --title "chore(lake): sync from HF dataset" \
+              --body "Automated sync of attestation/doctrine/key manifests + hf_sha from the SZLHOLDINGS/szl-lake HF dataset. No manual edits."
           fi
+          gh pr merge "$BR" --squash --auto || echo "auto-merge not enabled; PR left open for review."
