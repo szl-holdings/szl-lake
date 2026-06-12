@@ -67,9 +67,7 @@ jobs:
           git config user.name "Yachay"
           git checkout -B "$BR"
           git add -A
-          git commit -s -m "chore(lake): sync from HF $(date -u +%FT%TZ)
-
-Co-Authored-By: Perplexity Computer Agent <agent@perplexity.ai>"
+          git commit -s -m "chore(lake): sync from HF $(date -u +%FT%TZ)" -m "Co-Authored-By: Perplexity Computer Agent <agent@perplexity.ai>"
           git push -f origin "$BR"
           if ! gh pr view "$BR" --json number >/dev/null 2>&1; then
             gh pr create --base main --head "$BR" \
