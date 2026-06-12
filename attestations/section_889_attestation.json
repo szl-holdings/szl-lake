@@ -1,7 +1,9 @@
 {
   "schema": "szl.attest.section889/v1",
   "attestation": "Section 889 (a)(1)(A)/(B)",
-  "status": "COMPLIANT - no covered telecommunications/video-surveillance equipment from named entities (Huawei, ZTE, Hytera, Hikvision, Dahua) in the SZL stack",
+  "status": "COMPLIANT - no covered telecommunications/video-surveillance equipment from named entities in the SZL stack",
+  "vendors": ["Huawei", "ZTE", "Hytera", "Hikvision", "Dahua"],
+  "vendors_note": "The five covered Section 889 named entities. This attestation certifies NONE are used (see banned_vendors_used).",
   "banned_vendors_used": [],
   "sovereign_default": true,
   "captured_at_utc": "2026-06-02T02:14:39Z",
