@@ -1,0 +1,103 @@
+# verify-anchor-receipts-real.yml — REAL cosign DSSE round-trip guard for the
+# receipt verifier's SIGNATURE path.
+#
+# scripts/verify_lutar_lean_receipts.py re-verifies the anchored Theorem-U
+# receipt chain, and verify-anchor-receipts-selftest.yml protects its
+# integrity / chain-continuity / append-only-floor logic offline. But that
+# offline self-test deliberately STUBS cosign (a `--cosign` script that always
+# exits 0) so it can run without the network — which means the ACTUAL signature
+# path is unprotected there: dropping `--certificate-identity` /
+# `--certificate-oidc-issuer`, or accepting an envelope whose DSSE signature no
+# longer matches, would slip past it.
+#
+# This guard runs scripts/test_verify_lutar_lean_receipts_real.py with the REAL
+# cosign binary against the public Sigstore trust root + Rekor (no stub, no
+# monkeypatch). It proves rejection is SPECIFIC: the untouched anchored receipt
+# VERIFIES (symmetric control), while a byte-flipped signature, a wrong Fulcio
+# identity, and a wrong OIDC issuer each make the verifier exit non-zero. A
+# silent weakening of the signature/identity check is therefore caught BEFORE
+# merge, not just (maybe) in the scheduled verify-anchor-receipts run.
+#
+# It mirrors a11oy's dedicated real-verify CI job: gated on the explicit
+# SZL_LUTAR_RECEIPT_REAL_VERIFY flag (the test skips itself everywhere the flag
+# is unset, and where cosign is absent), and it needs the network for the public
+# trust root — so it does not run as a blind offline check.
+#
+# HONESTY: this re-checks the SIGNATURE + identity-pinning path only; no org
+# private key, OIDC token, or signing is required — it VERIFIES an
+# already-signed public receipt against the public Sigstore trust root.
+#
+# Org policy: only github-owned / verified actions, pinned by commit SHA; cosign
+# is the pinned release binary verified by sha256 (no third-party action).
+# Signed-off-by: Yachay <yachay@szlholdings.ai>
+
+name: Verify Anchor Receipts (real cosign)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/verify_lutar_lean_receipts.py'
+      - 'scripts/test_verify_lutar_lean_receipts_real.py'
+      - 'data/khipu/lutar_lean_receipts.ndjson'
+      - '.github/workflows/verify-anchor-receipts-real.yml'
+  pull_request:
+    paths:
+      - 'scripts/verify_lutar_lean_receipts.py'
+      - 'scripts/test_verify_lutar_lean_receipts_real.py'
+      - 'data/khipu/lutar_lean_receipts.ndjson'
+      - '.github/workflows/verify-anchor-receipts-real.yml'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Manual trigger reason'
+        required: false
+        default: 'manual real-verify'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-anchor-receipts-real-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COSIGN_VERSION: v2.4.1
+  COSIGN_SHA256: 8b24b946dd5809c6bd93de08033bcf6bc0ed7d336b7785787c080f574b89249b
+  PYTEST_VERSION: 8.3.5
+
+jobs:
+  real-verify:
+    name: Real cosign DSSE round-trip self-test of the receipt verifier
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      # cosign is the same tool the anchor + scheduled re-verify use. Pin the
+      # release binary + verify its sha256 (org policy: no third-party actions
+      # for signing/verification).
+      - name: Install cosign (pinned + checksum-verified)
+        run: |
+          set -euo pipefail
+          url="https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+          curl -fsSL -o /tmp/cosign "$url"
+          echo "${COSIGN_SHA256}  /tmp/cosign" | sha256sum -c -
+          chmod +x /tmp/cosign
+          /tmp/cosign version
+
+      - name: Install pytest (pinned)
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check "pytest==${PYTEST_VERSION}"
+
+      - name: Run REAL cosign DSSE round-trip self-test
+        env:
+          SZL_LUTAR_RECEIPT_REAL_VERIFY: "1"
+          COSIGN_BIN: /tmp/cosign
+        run: |
+          set -euo pipefail
+          python3 -m pytest scripts/test_verify_lutar_lean_receipts_real.py -v
