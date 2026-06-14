@@ -31,11 +31,13 @@ on:
       - 'scripts/verify_lutar_lean_receipts.py'
       - 'scripts/test_verify_lutar_lean_receipts.py'
       - '.github/workflows/verify-anchor-receipts-selftest.yml'
+  # Runs on EVERY pull request (no path filter) so it can serve as a REQUIRED
+  # status check on main without the "skipped but required" trap: a path-filtered
+  # required check never reports on unrelated PRs and would block them forever.
+  # This matches the always-run sibling required guards (Doctrine, Overclaim).
+  # The self-test is offline + stdlib-only, so running it on every PR is cheap.
   pull_request:
-    paths:
-      - 'scripts/verify_lutar_lean_receipts.py'
-      - 'scripts/test_verify_lutar_lean_receipts.py'
-      - '.github/workflows/verify-anchor-receipts-selftest.yml'
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
       reason:
