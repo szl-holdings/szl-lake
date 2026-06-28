@@ -70,6 +70,86 @@ curl -fsSL \
 
 ---
 
+## Unified Receipt Ledger
+
+The **one durable ledger** every SZL component POSTs governance receipts to.
+Previously each organ (ouroboros, hatun-mcp, szl-router, szl-mesh, vsp-otel,
+szl-trust, a11oy …) held receipts in an in-process silo that never converged,
+and `szl_lake_query.py` returned a stub. This is the real ingest + query path.
+
+**Modules**
+
+| File | Role |
+|---|---|
+| `szl_lake_store.py` | Durable, append-only, hash-chained NDJSON store (`ReceiptLedger`). Restart-safe — all state is rebuilt from disk, never an in-memory map that resets. |
+| `szl_lake_server.py` | FastAPI service exposing the ingest + query API. |
+| `szl_lake_client.py` | Fire-and-forget `emit_receipt(...)` helper for callers. |
+| `szl_lake_query.py` | `query_receipts(...)` now reads the real store (stub path replaced for receipts; `LakeQuery` kept importable for back-compat). |
+
+**Run it**
+
+```bash
+uvicorn szl_lake_server:app --host 0.0.0.0 --port 8088
+# store root: $SZL_LAKE_DIR (default ./khipu)
+```
+
+### Endpoints (`/api/lake/v1`)
+
+| Method · Path | Purpose |
+|---|---|
+| `POST /api/lake/v1/receipts` | Ingest one receipt (JSON object), a JSON array, or an **NDJSON batch** (`Content-Type: application/x-ndjson`). Idempotent on receipt `id`/`hash`. Returns `{accepted, ledger_offset, chain_head, chain_index, receipt_id}` (batch returns per-receipt results). |
+| `GET /api/lake/v1/receipts?organ=&since=&limit=` | Real query over the store, newest-first. `since` is an ISO timestamp. |
+| `GET /api/lake/v1/chain/head?organ=` | Current Khipu chain head + count for an organ (for cross-component verification). |
+| `GET /api/lake/v1/health` | Store reachable, total receipts, per-organ counts. |
+
+The ingest accepts the live **DSSE receipt shape** a11oy emits:
+`{id, ts, organ, decision, governance:{lambda, gates}, dsse:{payloadType, payload, signatures:[{sig, keyid}]}, energy}`.
+Receipts are partitioned on disk by `khipu/<organ>/<YYYY-MM-DD>.ndjson`.
+
+### `SZL_RECEIPT_SINK` wire contract
+
+Downstream components wire in with one env var + one import:
+
+```bash
+export SZL_RECEIPT_SINK=https://<deployed-lake-host>
+```
+
+```python
+from szl_lake_client import emit_receipt
+emit_receipt(my_receipt)   # returns immediately, never raises
+```
+
+`emit_receipt` is **non-blocking and never raises** — a slow or down sink must
+never take down a caller's governed action. If `SZL_RECEIPT_SINK` is unset it is
+a safe no-op. `emit_batch(...)` POSTs an NDJSON batch the same way. Timeout
+defaults to `1.5s` (override with `$SZL_RECEIPT_TIMEOUT`).
+
+### Hash-chain semantics
+
+Per organ, each stored envelope links `prev_hash → chain_hash` (the **Khipu**
+chain, formulas **F4 / F22**):
+
+```
+chain_hash = SHA3-256( canonical_json({
+    "prev_hash":   <prev chain_hash, or null at genesis>,
+    "receipt_id":  <receipt id/hash, or content hash if id-less>,
+    "organ":       <organ>,
+    "ts":          <receipt timestamp>,
+    "chain_index": <1-based position in this organ's chain>,
+}) )
+```
+
+`chain_index` is strictly monotonic per organ; `GET /chain/head` returns the
+latest `chain_hash` so any component can fetch and compare it for tamper-evident
+cross-verification. The Khipu chain is **Conjecture 2 (advisory BFT) — NOT a
+proven theorem.**
+
+**Honest labels.** Energy is stored as `{"label": "MEASURED", "joules": …}`
+only when a real measurement is supplied; when NVML/joules are absent it is
+`{"label": "UNAVAILABLE"}` — joules are never fabricated.
+
+---
+
 ## Cross-references
 
 - **Formal proofs**: [lutar-lean](https://github.com/szl-holdings/lutar-lean) — Lean 4 kernel at commit [`c7c0ba17`](https://github.com/szl-holdings/lutar-lean/commit/c7c0ba17)
