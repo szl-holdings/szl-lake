@@ -16,15 +16,51 @@ from typing import Any
 
 LAKE_BASE = "https://huggingface.co/datasets/SZLHOLDINGS/szl-lake/resolve/main"
 
+
+def query_receipts(organ: str | None = None, since: str | None = None,
+                   limit: int = 20) -> dict[str, Any]:
+    """Real query over the Unified Receipt Ledger durable store.
+
+    Reads the hash-chained NDJSON store maintained by szl_lake_store /
+    szl_lake_server (the live ingest path). This is the non-stub receipt query:
+    it returns actual stored envelopes, not an empty placeholder.
+    """
+    from szl_lake_store import get_default_ledger
+
+    led = get_default_ledger()
+    results = led.query(organ=organ, since=since, limit=limit)
+    return {
+        "entity_type": "receipt",
+        "filters": {"organ": organ, "since": since},
+        "limit": limit,
+        "doctrine": {"version": "v11", "declarations": 749, "axioms": 14,
+                     "sorries": 163, "kernel": "c7c0ba17"},
+        "count": len(results),
+        "results": results,
+        "source": "szl_lake_store (durable hash-chained NDJSON)",
+    }
+
+
 @dataclass
 class LakeQuery:
-    """Stub: structured query over szl-lake DAG."""
+    """Structured query over the szl-lake DAG.
+
+    For ``entity_type == "receipt"`` this now runs against the real Unified
+    Receipt Ledger store (see :func:`query_receipts`). Other entity types
+    retain the index-pointer stub until their own backing stores land.
+    """
     entity_type: str  # "attestation" | "receipt" | "doctrine" | "sbom" | "khipu"
     filters: dict[str, Any] = field(default_factory=dict)
     limit: int = 20
 
     def run(self) -> dict[str, Any]:
-        """Execute query (stub — real impl: fetch + filter lake_index.json)."""
+        """Execute query. Receipts hit the real store; others stay stubbed."""
+        if self.entity_type == "receipt":
+            return query_receipts(
+                organ=self.filters.get("organ"),
+                since=self.filters.get("since"),
+                limit=self.limit,
+            )
         return {
             "entity_type": self.entity_type,
             "filters": self.filters,

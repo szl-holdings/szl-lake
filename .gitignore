@@ -1,0 +1,9 @@
+# Unified Receipt Ledger runtime store (durable on the deployed host, not in VCS).
+# Default root is ./khipu (override with $SZL_LAKE_DIR). The canonical archival
+# copy lives in the HF dataset; this local dir is the live append target.
+/khipu/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
