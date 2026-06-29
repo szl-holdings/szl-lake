@@ -1,0 +1,104 @@
+# Copyright 2026 SZL Holdings — SPDX-License-Identifier: Apache-2.0
+name: Sync data to HF dataset
+
+# Pushes this repo's canonical receipt/data payload (data/**) to the live
+# Hugging Face dataset (SZLHOLDINGS/szl-lake) on every push to the default
+# branch, so external verifiers pulling the HF dataset never lag behind GitHub.
+#
+# Why this exists: szl-lake had only a one-way `sync-from-hf.yml` (HF -> GH for
+# the small attestation/doctrine/key manifests). The receipt payload authored in
+# this repo under data/** (the parquet receipt files + NDJSON Khipu chains, keys,
+# papers, sboms, trajectories) had NO automated path to HF, so the deployed HF
+# dataset drifted behind GitHub (the unified ingest + query API in #14 shipped on
+# GH while the HF receipt store stayed at its 2026-06-11 state).
+#
+# Direction & honesty:
+#   * This is a SYNC, not a rewrite. Files are uploaded verbatim; receipt
+#     contents and their SHA3-256 Khipu chains are never modified here.
+#   * It uploads data/** mapped to the dataset ROOT (data/khipu -> khipu, etc.),
+#     matching the dataset's existing layout.
+#   * It deliberately does NOT upload the repo README: the HF dataset card README
+#     carries its own YAML frontmatter (license/tags/pretty_name) that must
+#     survive untouched. Clobbering it would break the dataset card.
+#   * upload_folder is additive — it never deletes the NDJSON viewer copies the
+#     dataset already serves.
+#
+# Requires repo secret HF_TOKEN (HF write token with org write to SZLHOLDINGS).
+# Without it the job FAILS LOUDLY — it never fakes a green no-op sync.
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "data/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hf-sync-dataset-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.11"
+      # LOUD GUARD (no silent green): HF_TOKEN is REQUIRED to push the dataset.
+      # Without it the upload 401s; failing here makes the missing-secret state
+      # obvious instead of recording a green no-op over a stale HF dataset.
+      - name: Require HF_TOKEN (fail loudly if missing)
+        if: ${{ env.HF_TOKEN == '' }}
+        run: |
+          echo "::error title=HF_TOKEN missing::hf-sync needs HF_TOKEN to push SZLHOLDINGS/szl-lake."
+          echo "::error::Founder action required: add the repo/org secret HF_TOKEN (HF WRITE token, org write to SZLHOLDINGS)."
+          echo "::error::Create it at https://huggingface.co/settings/tokens . See FOUNDER_SECRETS_RUNBOOK.md."
+          exit 1
+      - name: Install huggingface_hub
+        if: ${{ env.HF_TOKEN != '' }}
+        run: pip install --quiet "huggingface_hub>=0.25"
+      - name: Mirror data/** payload to the HF dataset
+        if: ${{ env.HF_TOKEN != '' }}
+        env:
+          DATASET_ID: SZLHOLDINGS/szl-lake
+        run: |
+          set -euo pipefail
+          python3 <<'PYEOF'
+          import os
+          from huggingface_hub import HfApi
+
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          repo = os.environ["DATASET_ID"]
+          sha_before = api.dataset_info(repo).sha
+          commit = api.upload_folder(
+              repo_id=repo,
+              repo_type="dataset",
+              # folder_path="data" maps data/khipu -> khipu, data/keys -> keys,
+              # etc. at the dataset root, matching the dataset's existing layout.
+              folder_path="data",
+              path_in_repo=".",
+              commit_message=(
+                  "hf-sync: mirror receipt/data payload from GitHub "
+                  f"{os.environ.get('GITHUB_SHA','')[:8]}"
+              ),
+              commit_description=(
+                  "Verbatim sync of data/** (receipts, keys, papers, sboms, "
+                  "trajectories, doctrine). Receipt contents and SHA3-256 Khipu "
+                  "chains are unchanged. README dataset card is intentionally "
+                  "not touched."
+              ),
+              ignore_patterns=["**/__pycache__/**", "*.pyc", "**/.pytest_cache/**"],
+          )
+          print("Dataset commit:", getattr(commit, "commit_url", commit))
+          info = api.dataset_info(repo)
+          print("Dataset sha before:", sha_before)
+          print("Dataset sha after :", info.sha)
+          print("Dataset lastModified:", info.lastModified)
+          PYEOF
