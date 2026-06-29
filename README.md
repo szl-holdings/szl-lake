@@ -161,7 +161,14 @@ only when a real measurement is supplied; when NVML/joules are absent it is
 
 ## Index
 
-See [`lake_index.json`](lake_index.json) for the current pointer manifest (HF SHA, sync timestamp, directory list, doctrine constants). Auto-refreshed every 6 hours via the [sync workflow](.github/workflows/sync-from-hf.yml).
+See [`lake_index.json`](lake_index.json) for the current pointer manifest (HF SHA, sync timestamp, directory list, doctrine constants).
+
+**Sync workflows (two directions, non-overlapping scopes):**
+
+| Workflow | Direction | Scope |
+|---|---|---|
+| [`sync-from-hf.yml`](.github/workflows/sync-from-hf.yml) | HF → GH | Refreshes the small attestation/doctrine/key manifests + records the current HF SHA in `lake_index.json` (every 6h). |
+| [`hf-sync.yml`](.github/workflows/hf-sync.yml) | GH → HF | On push to `main` touching `data/**`, mirrors the receipt/data payload (`data/**`) verbatim to the HF dataset so external verifiers never lag behind GitHub. Receipt contents and their SHA3-256 Khipu chains are never modified; the HF dataset-card README is left untouched. Requires repo secret `HF_TOKEN` (write). |
 
 ---
 
