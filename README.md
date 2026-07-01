@@ -3,7 +3,7 @@
 [![HF Dataset](https://img.shields.io/badge/HF%20Dataset-SZLHOLDINGS%2Fszl--lake-FFD21E?style=flat-square&logo=huggingface&logoColor=000)](https://huggingface.co/datasets/SZLHOLDINGS/szl-lake)
 [![Doctrine v11 LOCKED](https://img.shields.io/badge/Doctrine-v11_LOCKED_749%2F14%2F163-d4a444?style=flat-square)](https://github.com/szl-holdings/lutar-lean/commit/c7c0ba17)
 [![License](https://img.shields.io/badge/License-Apache--2.0_%7C_CC--BY--4.0-blue?style=flat-square)](LICENSE)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20434276.svg)](https://doi.org/10.5281/zenodo.20434276)
+[![DOI Thesis v18.0](https://zenodo.org/badge/DOI/10.5281/zenodo.20434276.svg)](https://doi.org/10.5281/zenodo.20434276) [![DOI Concept](https://zenodo.org/badge/DOI/10.5281/zenodo.19944926.svg)](https://doi.org/10.5281/zenodo.19944926)
 
 > **GitHub front door.** This repository holds the README, small JSON indexes, and manifest pointers. The **HF dataset is canonical** for all NDJSON receipts and large binaries:
 > **[huggingface.co/datasets/SZLHOLDINGS/szl-lake](https://huggingface.co/datasets/SZLHOLDINGS/szl-lake)**
@@ -153,7 +153,8 @@ only when a real measurement is supplied; when NVML/joules are absent it is
 ## Cross-references
 
 - **Formal proofs**: [lutar-lean](https://github.com/szl-holdings/lutar-lean) — Lean 4 kernel at commit [`c7c0ba17`](https://github.com/szl-holdings/lutar-lean/commit/c7c0ba17)
-- **DOI**: [10.5281/zenodo.20434276](https://doi.org/10.5281/zenodo.20434276)
+- **DOI (Thesis v18.0)**: [10.5281/zenodo.20434276](https://doi.org/10.5281/zenodo.20434276)
+- **Concept DOI (always-latest)**: [10.5281/zenodo.19944926](https://doi.org/10.5281/zenodo.19944926)
 - **Docs**: [docs.szlholdings.com/lake](https://szl-holdings.github.io/docs-site/lake)
 - **HF org**: [huggingface.co/SZLHOLDINGS](https://huggingface.co/SZLHOLDINGS)
 
