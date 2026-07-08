@@ -36,8 +36,39 @@ from szl_lake_store import (  # noqa: E402
     ReceiptLedger,
     canonical_hash,
 )
+import szl_lake_store  # noqa: E402
 import szl_lake_server  # noqa: E402
 import szl_lake_client  # noqa: E402
+
+
+def _partition_files(root: str, organ: str) -> list[str]:
+    """On-disk NDJSON partition file(s) for one organ (for tamper tests)."""
+    d = os.path.join(root, organ)
+    return sorted(os.path.join(d, f) for f in os.listdir(d)
+                  if f.endswith(".ndjson"))
+
+
+def _read_envelopes(root: str, organ: str) -> list[dict]:
+    import json as _json
+    envs = []
+    for p in _partition_files(root, organ):
+        with open(p, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line:
+                    envs.append(_json.loads(line))
+    return envs
+
+
+def _rewrite_envelopes(root: str, organ: str, envs: list[dict]) -> None:
+    """Overwrite an organ's single-partition file with the given envelopes."""
+    import json as _json
+    paths = _partition_files(root, organ)
+    assert len(paths) == 1, "helper assumes a single partition file"
+    with open(paths[0], "w", encoding="utf-8") as fh:
+        for e in envs:
+            fh.write(_json.dumps(e, sort_keys=True,
+                                 separators=(",", ":")) + "\n")
 
 
 def make_receipt(rid: str, organ: str = "a11oy", ts: str = "2026-06-28T10:00:00Z",
@@ -334,6 +365,175 @@ def test_client_round_trip_against_testclient(client, monkeypatch):
                   headers={"Content-Type": "application/json"})
     assert resp.status_code == 200
     assert resp.json()["accepted"] is True
+
+
+# ------------------------------------------------- chain verify (tamper) ----
+# Adversarial, on-disk tamper-evidence tests for ReceiptLedger.verify_chain.
+# Each mutates the actual NDJSON partition on disk and asserts the verifier
+# re-derives the Khipu chain and FLAGS the break — the honest tamper-EVIDENT
+# guarantee (advisory; Khipu is Conjecture 2, not a proven theorem).
+
+def test_verify_clean_chain_is_ok(ledger):
+    ledger.append(make_receipt("v1"))
+    ledger.append(make_receipt("v2"))
+    ledger.append(make_receipt("v3"))
+    rep = ledger.verify_chain("a11oy")
+    assert rep["ok"] is True
+    assert rep["broken"] == []
+    assert rep["count"] == 3
+    assert rep["chain_index"] == 3
+    assert rep["chain_head"] == ledger.chain_head("a11oy")["chain_head"]
+
+
+def test_verify_empty_organ_is_ok(ledger):
+    rep = ledger.verify_chain("never-written")
+    assert rep["ok"] is True
+    assert rep["count"] == 0
+    assert rep["chain_head"] is None
+
+
+def test_verify_invalid_organ_rejected(ledger):
+    with pytest.raises(ValueError):
+        ledger.verify_chain("../escape")
+
+
+def test_verify_detects_committed_field_tamper(ledger):
+    # Mutate a COMMITTED link field (receipt_id) without recomputing the hash.
+    ledger.append(make_receipt("t1"))
+    ledger.append(make_receipt("t2"))
+    envs = _read_envelopes(ledger.root, "a11oy")
+    envs[1]["receipt_id"] = "forged-id"
+    _rewrite_envelopes(ledger.root, "a11oy", envs)
+    ledger.reload()
+    rep = ledger.verify_chain("a11oy")
+    assert rep["ok"] is False
+    kinds = {b["kind"] for b in rep["broken"]}
+    # receipt_id feeds the link hash AND must match the body identity:
+    assert "chain_hash_mismatch" in kinds
+    assert "receipt_id_mismatch" in kinds
+
+
+def test_verify_detects_chain_hash_bitflip(ledger):
+    ledger.append(make_receipt("bf1"))
+    ledger.append(make_receipt("bf2"))
+    envs = _read_envelopes(ledger.root, "a11oy")
+    h = envs[1]["chain_hash"]
+    envs[1]["chain_hash"] = ("0" if h[0] != "0" else "1") + h[1:]
+    _rewrite_envelopes(ledger.root, "a11oy", envs)
+    ledger.reload()
+    rep = ledger.verify_chain("a11oy")
+    assert rep["ok"] is False
+    kinds = {b["kind"] for b in rep["broken"]}
+    # the flipped head no longer re-derives, and it breaks the NEXT prev link
+    assert "chain_hash_mismatch" in kinds
+
+
+def test_verify_detects_truncation(ledger):
+    ledger.append(make_receipt("d1"))
+    ledger.append(make_receipt("d2"))
+    ledger.append(make_receipt("d3"))
+    envs = _read_envelopes(ledger.root, "a11oy")
+    del envs[1]  # drop the middle receipt -> index gap + broken prev link
+    _rewrite_envelopes(ledger.root, "a11oy", envs)
+    ledger.reload()
+    rep = ledger.verify_chain("a11oy")
+    assert rep["ok"] is False
+    kinds = {b["kind"] for b in rep["broken"]}
+    assert "index_discontinuity" in kinds
+    assert "prev_hash_mismatch" in kinds
+
+
+def test_verify_detects_reorder(ledger):
+    ledger.append(make_receipt("o1"))
+    ledger.append(make_receipt("o2"))
+    ledger.append(make_receipt("o3"))
+    envs = _read_envelopes(ledger.root, "a11oy")
+    envs[0], envs[1] = envs[1], envs[0]  # swap first two lines
+    _rewrite_envelopes(ledger.root, "a11oy", envs)
+    ledger.reload()
+    rep = ledger.verify_chain("a11oy")
+    assert rep["ok"] is False
+    kinds = {b["kind"] for b in rep["broken"]}
+    assert "index_discontinuity" in kinds
+
+
+def test_verify_detects_idless_body_tamper(ledger):
+    # A content-addressed (id-less) receipt is bound IN FULL: editing any body
+    # field must be caught (its identity no longer hashes to receipt_id).
+    rec = {"organ": "a11oy", "ts": "2026-06-28T10:00:00Z", "decision": "ADMIT"}
+    ledger.append(dict(rec))
+    envs = _read_envelopes(ledger.root, "a11oy")
+    envs[0]["receipt"]["decision"] = "REJECT"  # tamper the stored body
+    _rewrite_envelopes(ledger.root, "a11oy", envs)
+    ledger.reload()
+    rep = ledger.verify_chain("a11oy")
+    assert rep["ok"] is False
+    assert "receipt_id_mismatch" in {b["kind"] for b in rep["broken"]}
+
+
+def test_verify_honest_scope_idbearing_nonid_field(ledger):
+    # HONEST SCOPE: for a receipt that supplies its OWN id, the chain commits to
+    # identity + ordering, not to every payload byte — so editing a NON-identity
+    # field is out of scope for chain verification (the receipt's DSSE signature
+    # covers that). This test documents the boundary so it is never overclaimed.
+    ledger.append(make_receipt("sc1", decision="ADMIT"))
+    envs = _read_envelopes(ledger.root, "a11oy")
+    envs[0]["receipt"]["decision"] = "REJECT"  # non-identity field, id unchanged
+    _rewrite_envelopes(ledger.root, "a11oy", envs)
+    ledger.reload()
+    rep = ledger.verify_chain("a11oy")
+    assert rep["ok"] is True  # not detectable via the hash-chain alone
+
+
+def test_verify_reads_disk_not_cache(ledger):
+    # verify_chain must consult authoritative on-disk state, not the in-memory
+    # mirror — otherwise it could not catch tampering behind a running process.
+    ledger.append(make_receipt("dc1"))
+    ledger.append(make_receipt("dc2"))
+    _ = ledger.chain_head("a11oy")  # warm the in-memory cache
+    envs = _read_envelopes(ledger.root, "a11oy")
+    envs[1]["organ"] = "a11oy"  # keep organ, but corrupt ts (committed field)
+    envs[1]["ts"] = "1999-01-01T00:00:00Z"
+    _rewrite_envelopes(ledger.root, "a11oy", envs)
+    # NOTE: no reload() — cache is stale/clean, disk is tampered.
+    rep = ledger.verify_chain("a11oy")
+    assert rep["ok"] is False
+    assert "chain_hash_mismatch" in {b["kind"] for b in rep["broken"]}
+
+
+# ----------------------------------------------- chain verify (server) ------
+
+def test_get_chain_verify_ok(client):
+    c, _ = client
+    c.post("/api/lake/v1/receipts", json=make_receipt("sv1", organ="szl-mesh"))
+    c.post("/api/lake/v1/receipts", json=make_receipt("sv2", organ="szl-mesh"))
+    resp = c.get("/api/lake/v1/chain/verify", params={"organ": "szl-mesh"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["count"] == 2
+    assert body["broken"] == []
+
+
+def test_get_chain_verify_detects_tamper(client):
+    c, led = client
+    c.post("/api/lake/v1/receipts", json=make_receipt("svt1", organ="ouroboros"))
+    c.post("/api/lake/v1/receipts", json=make_receipt("svt2", organ="ouroboros"))
+    envs = _read_envelopes(led.root, "ouroboros")
+    envs[0]["chain_index"] = 99  # committed field tamper
+    _rewrite_envelopes(led.root, "ouroboros", envs)
+    led.reload()
+    resp = c.get("/api/lake/v1/chain/verify", params={"organ": "ouroboros"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is False
+    assert len(body["broken"]) >= 1
+
+
+def test_get_chain_verify_invalid_organ_400(client):
+    c, _ = client
+    resp = c.get("/api/lake/v1/chain/verify", params={"organ": "../x"})
+    assert resp.status_code == 400
 
 
 if __name__ == "__main__":

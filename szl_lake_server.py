@@ -145,6 +145,26 @@ async def get_chain_head(
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
+@app.get(API_PREFIX + "/chain/verify")
+async def get_chain_verify(
+    request: Request,
+    organ: str = Query(..., description="organ whose chain to re-verify"),
+):
+    """Re-derive an organ's Khipu chain from disk (tamper-EVIDENT, advisory).
+
+    Returns {organ, ok, count, chain_head, chain_index, broken:[...]}. A caller
+    can poll this to detect on-disk tampering / truncation / re-ordering; ok is
+    False (with per-break detail) when the stored chain no longer re-derives.
+    Responds HTTP 200 even when ok is False — a detected break is a valid,
+    successful verification result, not a request error.
+    """
+    led = _ledger(request)
+    try:
+        return led.verify_chain(organ)
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+
 @app.get(API_PREFIX + "/health")
 async def get_health(request: Request):
     led = _ledger(request)
