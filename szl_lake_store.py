@@ -373,6 +373,134 @@ class ReceiptLedger:
                 "count": st.count,
             }
 
+    def verify_chain(self, organ: str) -> dict:
+        """Re-derive and verify one organ's Khipu chain straight from disk.
+
+        Tamper-EVIDENT (advisory — the Khipu chain is Conjecture 2, an advisory
+        BFT construction, NOT a proven theorem): this replays the on-disk NDJSON
+        partitions in stored order and, for every envelope, checks that
+
+          1. ``chain_index`` is strictly +1 monotonic from genesis (a gap, a
+             re-order, a truncation, or an inserted line breaks this),
+          2. ``prev_hash`` links to the previous envelope's stored
+             ``chain_hash`` (``None`` only at genesis),
+          3. the stored ``chain_hash`` EQUALS SHA3-256 recomputed over the
+             canonical link object, so mutating any COMMITTED link field
+             (``prev_hash``/``receipt_id``/``organ``/``ts``/``chain_index``)
+             is detected, and
+          4. the stored ``receipt_id`` still EQUALS ``receipt_identity`` of the
+             stored receipt body — which binds a content-addressed (id-less)
+             receipt's entire body to the chain and detects tampering of an
+             id-bearing receipt's identity field.
+
+        HONEST SCOPE. This verifies hash-chain integrity + ordering. It does NOT
+        verify DSSE receipt signatures (a separate concern — see the cosign
+        verify path). For a receipt that supplies its OWN id, the chain commits
+        to that identity and ordering, not to every payload byte, so tampering a
+        NON-identity field of an id-bearing receipt is out of scope here (the
+        receipt's DSSE signature covers that). A content-addressed (id-less)
+        receipt IS bound in full by check (4).
+
+        Reads authoritative on-disk state directly (never the in-memory cache),
+        so it catches tampering done to the files behind a running process.
+
+        Returns ``{organ, chain_alg, ok, count, chain_head, chain_index,
+        broken:[{position, kind, detail}, ...]}``. ``ok`` is True iff
+        ``broken`` is empty.
+        """
+        org = normalize_organ(organ)
+        broken: list[dict] = []
+        expected_prev: str | None = None
+        pos = 0
+        last_hash: str | None = None
+        last_index = 0
+
+        with self._lock:
+            for path in self._iter_partition_files(org):
+                with open(path, "r", encoding="utf-8") as fh:
+                    for lineno, raw in enumerate(fh, 1):
+                        line = raw.strip()
+                        if not line:
+                            continue
+                        pos += 1
+                        try:
+                            env = json.loads(line)
+                        except json.JSONDecodeError:
+                            broken.append({
+                                "position": pos,
+                                "kind": "unparseable_line",
+                                "detail": f"{os.path.basename(path)}:{lineno}",
+                            })
+                            continue
+                        if not isinstance(env, dict):
+                            broken.append({
+                                "position": pos,
+                                "kind": "unparseable_line",
+                                "detail": f"{os.path.basename(path)}:{lineno}",
+                            })
+                            continue
+
+                        ci = env.get("chain_index")
+                        if ci != pos:
+                            broken.append({
+                                "position": pos,
+                                "kind": "index_discontinuity",
+                                "detail": f"expected {pos}, stored {ci!r}",
+                            })
+
+                        stored_prev = env.get("prev_hash")
+                        if stored_prev != expected_prev:
+                            broken.append({
+                                "position": pos,
+                                "kind": "prev_hash_mismatch",
+                                "detail": (f"expected {expected_prev!r}, "
+                                           f"stored {stored_prev!r}"),
+                            })
+
+                        stored_hash = env.get("chain_hash")
+                        recomputed = canonical_hash({
+                            "prev_hash": stored_prev,
+                            "receipt_id": env.get("receipt_id"),
+                            "organ": env.get("organ"),
+                            "ts": env.get("ts"),
+                            "chain_index": ci,
+                        })
+                        if recomputed != stored_hash:
+                            broken.append({
+                                "position": pos,
+                                "kind": "chain_hash_mismatch",
+                                "detail": "recomputed link hash != stored",
+                            })
+
+                        receipt = env.get("receipt")
+                        if isinstance(receipt, dict):
+                            try:
+                                rid = receipt_identity(receipt)
+                            except Exception:  # noqa: BLE001
+                                rid = None
+                            if rid != env.get("receipt_id"):
+                                broken.append({
+                                    "position": pos,
+                                    "kind": "receipt_id_mismatch",
+                                    "detail": ("stored receipt body no longer "
+                                               "hashes to receipt_id"),
+                                })
+
+                        expected_prev = stored_hash
+                        last_hash = stored_hash
+                        if isinstance(ci, int):
+                            last_index = ci
+
+        return {
+            "organ": org,
+            "chain_alg": CHAIN_HASH,
+            "ok": not broken,
+            "count": pos,
+            "chain_head": last_hash,
+            "chain_index": last_index,
+            "broken": broken,
+        }
+
     def health(self) -> dict:
         """Store reachability, total receipts, and per-organ counts."""
         with self._lock:
