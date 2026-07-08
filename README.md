@@ -1,3 +1,5 @@
+> **SZL Holdings** · Doctrine v11 · Λ = Conjecture 1 (advisory, never "green"/theorem) · canonical [a-11-oy.com](https://a-11-oy.com)
+
 # SZL Holdings Data Lake — `szl-lake`
 
 [![HF Dataset](https://img.shields.io/badge/HF%20Dataset-SZLHOLDINGS%2Fszl--lake-FFD21E?style=flat-square&logo=huggingface&logoColor=000)](https://huggingface.co/datasets/SZLHOLDINGS/szl-lake)
