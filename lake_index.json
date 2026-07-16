@@ -12,6 +12,7 @@
     "keys",
     "khipu",
     "papers",
+    "quant",
     "sboms",
     "trajectories"
   ],
@@ -71,7 +72,7 @@
     },
     "locked-baseline": {
       "kind": "locked-baseline",
-      "title": "Locked-proven baseline (Doctrine v11) — kernel meta-invariants",
+      "title": "Locked-proven baseline (Doctrine v11) \u2014 kernel meta-invariants",
       "status": "REAL-invariant",
       "kernel_commit": "25e0b2af781f5fb10324945ea10c861bcc28cc83",
       "kernel_commit_short": "25e0b2af781f",
@@ -100,7 +101,7 @@
   },
   "latest_anchor": {
     "kind": "locked-baseline",
-    "title": "Locked-proven baseline (Doctrine v11) — kernel meta-invariants",
+    "title": "Locked-proven baseline (Doctrine v11) \u2014 kernel meta-invariants",
     "status": "REAL-invariant",
     "kernel_commit": "25e0b2af781f5fb10324945ea10c861bcc28cc83",
     "kernel_commit_short": "25e0b2af781f",
