@@ -76,6 +76,7 @@ jobs:
           if ! gh pr view "$BR" --json number >/dev/null 2>&1; then
             gh pr create --base main --head "$BR" \
               --title "chore(lake): sync from HF dataset" \
-              --body "Automated sync of attestation/doctrine/key manifests + hf_sha from the SZLHOLDINGS/szl-lake HF dataset. No manual edits."
+              --body "Automated sync of attestation/doctrine/key manifests + hf_sha from the SZLHOLDINGS/szl-lake HF dataset. No manual edits." \
+              || echo "::warning title=PR creation blocked for GITHUB_TOKEN::Sync branch $BR is pushed, but this org does not let Actions open PRs (can_approve_pull_request_reviews=false). Open the PR manually; subsequent runs refresh the branch and any open PR. Nothing lands without a reviewed merge."
           fi
           gh pr merge "$BR" --squash --auto || echo "auto-merge not enabled; PR left open for review."
