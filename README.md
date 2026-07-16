@@ -33,6 +33,22 @@ The SZL Data Lake is the diligence-defensible corpus of governance receipts for 
 
 ## How to verify
 
+### 0 — One command, offline
+
+```bash
+git clone https://github.com/szl-holdings/szl-lake && cd szl-lake
+bash scripts/verify_lake_offline.sh
+```
+
+Re-verifies everything this clone can prove **without network**: the vendored
+pinned verifier's own integrity (40-hex upstream pin + byte hash, tamper =
+hard refuse), all quant genesis receipts (DSSE ed25519 vs the lake's pinned
+key), the full autonomous-ledger hash chain, and every per-file sha256
+manifest — then prints an honest list of what offline verification CANNOT
+cover (cosign-keyless rows, GitHub↔HF equality, Rekor anchors). Verification
+proves integrity + origin only, never accuracy or profitability. Requires
+bash, python3, node ≥ 18.
+
 ### 1 — Fetch receipts from HF (canonical source)
 
 ```bash

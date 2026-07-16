@@ -1,0 +1,16 @@
+{
+  "schema": "szl.lake.vendored/v1",
+  "note": "Verbatim vendored copies for OFFLINE verification. Each entry pins an exact upstream commit (40-hex, refuse moving refs) and the byte-exact sha256 of the vendored file. verify_lake_offline.sh refuses to execute a vendored tool whose hash does not match (tamper = hard fail, no silent skip).",
+  "files": [
+    {
+      "file": "tools/vendored/verify.mjs",
+      "mode": "verbatim",
+      "sha256": "576b892e6182e7e5e9a62cb8e87a811558932d491d16101979e8659c817b33d0",
+      "upstream": {
+        "repo": "szl-holdings/szl-quant",
+        "commit": "d5b174630536a9c3f5008d3d140ddb7048dbcd76",
+        "path": "verify/verify.mjs"
+      }
+    }
+  ]
+}
