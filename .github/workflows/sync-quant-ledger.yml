@@ -1,0 +1,79 @@
+name: Sync quant ledger
+on:
+  schedule: [{ cron: "47 */6 * * *" }]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+concurrency:
+  group: sync-quant-ledger
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Require the lake's pinned engine key (fail loudly if missing)
+        run: |
+          if [ ! -f data/quant/keys/engine_pubkey.json ]; then
+            echo "::error title=pinned key missing::data/quant/keys/engine_pubkey.json is the ONLY key this mirror trusts; refusing to fetch anything without it."
+            exit 1
+          fi
+      - name: Fetch szl-quant ledger branch + pinned verifier (public, tokenless)
+        run: |
+          set -euo pipefail
+          VERIFIER_PIN=d5b174630536a9c3f5008d3d140ddb7048dbcd76
+          LEDGER_SHA=$(git ls-remote https://github.com/szl-holdings/szl-quant.git refs/heads/ledger | cut -f1)
+          if [ -z "$LEDGER_SHA" ]; then
+            echo "::error::could not resolve szl-holdings/szl-quant@ledger tip"; exit 1
+          fi
+          mkdir -p /tmp/quant-src /tmp/ledger-src
+          curl -fsSL "https://codeload.github.com/szl-holdings/szl-quant/tar.gz/$VERIFIER_PIN" | tar -xz -C /tmp/quant-src --strip-components=1
+          curl -fsSL "https://codeload.github.com/szl-holdings/szl-quant/tar.gz/$LEDGER_SHA" | tar -xz -C /tmp/ledger-src --strip-components=1
+          echo "VERIFIER_PIN=$VERIFIER_PIN" >> "$GITHUB_ENV"
+          echo "LEDGER_SHA=$LEDGER_SHA" >> "$GITHUB_ENV"
+      - name: Verify EVERY ledger receipt + walk the full chain (fail closed)
+        run: |
+          set -euo pipefail
+          # The trust anchor is the LAKE's own pinned key copy - never a key
+          # fetched from the branch being verified.
+          KEY="$GITHUB_WORKSPACE/data/quant/keys/engine_pubkey.json"
+          cd /tmp/ledger-src
+          for d in ledger/*/; do
+            node /tmp/quant-src/verify/verify.mjs --pubkey "$KEY" --dir "$d"
+          done
+          node /tmp/quant-src/verify/verify.mjs --pubkey "$KEY" --chain ledger/
+      - name: Mirror verified tree + regenerate the family manifest
+        run: |
+          set -euo pipefail
+          rm -rf data/quant/ledger
+          mkdir -p data/quant/ledger
+          cp -R /tmp/ledger-src/ledger/. data/quant/ledger/
+          if [ -f /tmp/ledger-src/INDEX.md ]; then
+            cp /tmp/ledger-src/INDEX.md data/quant/ledger/INDEX.md
+          fi
+          python3 .github/scripts/regen_quant_manifest.py
+      - name: Open/refresh PR if changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Same landing pattern as sync-from-hf: main is branch-protected, so
+          # push a branch and open/refresh a PR; best-effort auto-merge; clean
+          # no-op when the mirror is already current.
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "Ledger mirror already current; nothing to sync."; exit 0
+          fi
+          BR="chore/quant-ledger-sync"
+          git config user.email "yachay@szlholdings.ai"
+          git config user.name "Yachay"
+          git checkout -B "$BR"
+          git add -A
+          git commit -s -m "chore(lake): mirror szl-quant ledger @ ${LEDGER_SHA:0:12} ($(date -u +%FT%TZ))" \
+            -m "Every receipt + the full hash chain re-verified in this run against data/quant/keys/engine_pubkey.json before commit."
+          git push -f origin "$BR"
+          if ! gh pr view "$BR" --json number >/dev/null 2>&1; then
+            gh pr create --base main --head "$BR" \
+              --title "chore(lake): mirror the szl-quant autonomous ledger" \
+              --body "Automated 6-hourly mirror of the DSSE-signed, hash-chained paper ledger from szl-holdings/szl-quant@ledger into data/quant/ledger/. Every receipt and the full chain are re-verified in CI against the lake's pinned engine key BEFORE this PR is refreshed; verification failure aborts the sync with no mirror proposed. After merge, hf-sync mirrors the tree to the HF dataset. ADVISORY_PAPER_ONLY - verification proves INTEGRITY + ORIGIN only, never accuracy or profitability."
+          fi
+          gh pr merge "$BR" --squash --auto || echo "auto-merge not enabled; PR left open for review."

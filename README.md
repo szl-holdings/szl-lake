@@ -27,7 +27,7 @@ The SZL Data Lake is the diligence-defensible corpus of governance receipts for 
 | `papers/` | Zenodo paper record references |
 | `sboms/` | CycloneDX SBOM pointers |
 | `trajectories/` | Bounded-recursion execution traces |
-| `quant/` | DSSE-signed quant advisory receipts (ADVISORY / PAPER-ONLY — no execution, no custody, not financial advice; verification = integrity + origin only) |
+| `quant/` | DSSE-signed quant advisory receipts (ADVISORY / PAPER-ONLY — no execution, no custody, not financial advice; verification = integrity + origin only); `ledger/` is a ~6-hourly CI-verified mirror of the engine's autonomous paper ledger — every receipt + the full hash chain re-verified against the pinned key before each mirror lands |
 
 ---
 
