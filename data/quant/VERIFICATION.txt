@@ -13,3 +13,20 @@ PASS  receipts/signal_JUP_1784088245451.receipt.json  keyid=5c6cf59741ade920
 PASS  receipts/signal_SOL_1784088245451.receipt.json  keyid=5c6cf59741ade920
 
 All 9 receipt(s) verified.
+
+AUTONOMOUS LEDGER MIRROR (ledger/)
+----------------------------------
+Mirrored ~6-hourly from szl-holdings/szl-quant@ledger by lake CI
+(.github/workflows/sync-quant-ledger.yml). Every receipt and the full
+hash chain are re-verified against keys/engine_pubkey.json (the lake's
+own pinned copy -- never a key from the branch being verified) BEFORE
+each mirror lands; a verification failure aborts the sync.
+manifest.json#ledger records the exact ledger commit + verifier pin.
+
+Walk the mirrored chain yourself:
+  git clone https://github.com/szl-holdings/szl-quant && cd szl-quant
+  node verify/verify.mjs --pubkey ../path/to/lake/data/quant/keys/engine_pubkey.json \
+    --chain ../path/to/lake/data/quant/ledger/
+
+GitHub cron is best-effort: gaps mean runs did not fire -- the ledger
+MEASURES what happened, promises nothing.
