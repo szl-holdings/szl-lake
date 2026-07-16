@@ -74,6 +74,7 @@ jobs:
           if ! gh pr view "$BR" --json number >/dev/null 2>&1; then
             gh pr create --base main --head "$BR" \
               --title "chore(lake): mirror the szl-quant autonomous ledger" \
-              --body "Automated 6-hourly mirror of the DSSE-signed, hash-chained paper ledger from szl-holdings/szl-quant@ledger into data/quant/ledger/. Every receipt and the full chain are re-verified in CI against the lake's pinned engine key BEFORE this PR is refreshed; verification failure aborts the sync with no mirror proposed. After merge, hf-sync mirrors the tree to the HF dataset. ADVISORY_PAPER_ONLY - verification proves INTEGRITY + ORIGIN only, never accuracy or profitability."
+              --body "Automated 6-hourly mirror of the DSSE-signed, hash-chained paper ledger from szl-holdings/szl-quant@ledger into data/quant/ledger/. Every receipt and the full chain are re-verified in CI against the lake's pinned engine key BEFORE this PR is refreshed; verification failure aborts the sync with no mirror proposed. After merge, hf-sync mirrors the tree to the HF dataset. ADVISORY_PAPER_ONLY - verification proves INTEGRITY + ORIGIN only, never accuracy or profitability." \
+              || echo "::warning title=PR creation blocked for GITHUB_TOKEN::Verified mirror pushed to $BR, but this org does not let Actions open PRs (can_approve_pull_request_reviews=false). Open the PR manually; subsequent runs will refresh the branch and the open PR. Nothing is stale-as-fresh: the mirror only lands via a reviewed merge."
           fi
           gh pr merge "$BR" --squash --auto || echo "auto-merge not enabled; PR left open for review."
