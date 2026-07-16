@@ -3,10 +3,12 @@ on:
   schedule: [{ cron: "13 */6 * * *" }]
   workflow_dispatch:
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 jobs:
   sync:
+    permissions:
+      contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     # secrets context is NOT available in step-level `if:` or top-level env —
     # map it through job-level env first, then gate on env.HF_TOKEN.
