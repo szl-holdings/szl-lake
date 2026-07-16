@@ -1,0 +1,15 @@
+szl-quant receipt verification — 2026-07-15T04:04:55Z
+verifier: verify/verify.mjs (independent — imports nothing from src/)
+pinned key: keys/engine_pubkey.json
+
+PASS  receipts/backtest_BONK_365d.receipt.json  keyid=5c6cf59741ade920
+PASS  receipts/backtest_BTC_365d.receipt.json  keyid=5c6cf59741ade920
+PASS  receipts/backtest_ETH_365d.receipt.json  keyid=5c6cf59741ade920
+PASS  receipts/backtest_SOL_365d.receipt.json  keyid=5c6cf59741ade920
+PASS  receipts/session_1784088245451.receipt.json  keyid=5c6cf59741ade920
+PASS  receipts/signal_$WIF_1784088245451.receipt.json  keyid=5c6cf59741ade920
+PASS  receipts/signal_Bonk_1784088245451.receipt.json  keyid=5c6cf59741ade920
+PASS  receipts/signal_JUP_1784088245451.receipt.json  keyid=5c6cf59741ade920
+PASS  receipts/signal_SOL_1784088245451.receipt.json  keyid=5c6cf59741ade920
+
+All 9 receipt(s) verified.

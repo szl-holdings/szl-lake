@@ -1,0 +1,76 @@
+{
+  "schema": "szl.lake.quant/v1",
+  "generated_at_utc": "2026-07-16T16:01:13Z",
+  "note": "Doctrine-governed quant engine receipts, copied VERBATIM from the source repo. ADVISORY_PAPER_ONLY: no execution, no custody, NOT financial advice. Each receipt is a DSSE envelope (in-toto Statement v1) signed by the engine ed25519 key; signature verification proves INTEGRITY + ORIGIN only - never accuracy or profitability. Lambda roll-ups referenced by receipts remain Conjecture 1 (open).",
+  "source": {
+    "repo": "https://github.com/szl-holdings/szl-quant",
+    "commit": "aac2fbe021cfeec05333020903bb6b2720ef9efc",
+    "path": "receipts/"
+  },
+  "signing": {
+    "alg": "ed25519",
+    "keyId": "5c6cf59741ade920",
+    "key_file": "keys/engine_pubkey.json",
+    "keyId_derivation": "sha256(SPKI DER)[:16 hex]",
+    "independent_verifier": "https://github.com/szl-holdings/szl-quant/blob/main/verify/verify.mjs"
+  },
+  "live_surface": "https://a-11-oy.com/signals",
+  "count": 9,
+  "files": [
+    {
+      "path": "VERIFICATION.txt",
+      "sha256": "846cdb3265e8d4a60ae5187ab797991c7126fe96d5dbc9ca8996267be8721674",
+      "bytes": 858
+    },
+    {
+      "path": "backtest_BONK_365d.receipt.json",
+      "sha256": "5f704d1b6c2cb44f4f697d50f4a55faece874031fe536b38f6bbf275981adfc8",
+      "bytes": 7488
+    },
+    {
+      "path": "backtest_BTC_365d.receipt.json",
+      "sha256": "41a5233363ac15b93d09a16648980fee1d804ff8f368576e664bf8cc063dda6b",
+      "bytes": 7456
+    },
+    {
+      "path": "backtest_ETH_365d.receipt.json",
+      "sha256": "54b0a807159815f9b7235cfb8479fb491b8bcaf1a99658c847be0107dd273b0b",
+      "bytes": 7508
+    },
+    {
+      "path": "backtest_SOL_365d.receipt.json",
+      "sha256": "4a0e1ecf4c9b482856f2acf20b7b1a2e9c033d96d5b0afa5b82850eac68bffef",
+      "bytes": 7516
+    },
+    {
+      "path": "keys/engine_pubkey.json",
+      "sha256": "49d229951086d3f46a66db0f0c15417811d416c0ced35ab1987f8fb773c4c9c2",
+      "bytes": 290
+    },
+    {
+      "path": "session_1784088245451.receipt.json",
+      "sha256": "ba298fae87cc2863bf101b90fcd4e87712f302caa659666957760aec0c963231",
+      "bytes": 2332
+    },
+    {
+      "path": "signal_$WIF_1784088245451.receipt.json",
+      "sha256": "73840baa207a6f68099bd5acd0e499aa036bb445435394187c1757bd5439cb12",
+      "bytes": 3128
+    },
+    {
+      "path": "signal_Bonk_1784088245451.receipt.json",
+      "sha256": "6d7fe18b74e322441139db2ad0aae953999145ad425fd717101049900bc0d1fc",
+      "bytes": 3792
+    },
+    {
+      "path": "signal_JUP_1784088245451.receipt.json",
+      "sha256": "c1b11836f8cac18c93cad2a4ecda0ece9fb84b676b148e507a8e1f43421e8304",
+      "bytes": 3240
+    },
+    {
+      "path": "signal_SOL_1784088245451.receipt.json",
+      "sha256": "b070d85c1cc30dad4eee8952d353a65abbeb7b2ea8da009ba85f4c843993981a",
+      "bytes": 3880
+    }
+  ]
+}
