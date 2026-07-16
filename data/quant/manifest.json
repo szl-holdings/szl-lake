@@ -1,6 +1,6 @@
 {
   "schema": "szl.lake.quant/v1",
-  "generated_at_utc": "2026-07-16T16:01:13Z",
+  "generated_at_utc": "2026-07-16T17:48:55Z",
   "note": "Doctrine-governed quant engine receipts, copied VERBATIM from the source repo. ADVISORY_PAPER_ONLY: no execution, no custody, NOT financial advice. Each receipt is a DSSE envelope (in-toto Statement v1) signed by the engine ed25519 key; signature verification proves INTEGRITY + ORIGIN only - never accuracy or profitability. Lambda roll-ups referenced by receipts remain Conjecture 1 (open).",
   "source": {
     "repo": "https://github.com/szl-holdings/szl-quant",
@@ -19,8 +19,8 @@
   "files": [
     {
       "path": "VERIFICATION.txt",
-      "sha256": "846cdb3265e8d4a60ae5187ab797991c7126fe96d5dbc9ca8996267be8721674",
-      "bytes": 858
+      "sha256": "57da1986a3bf2a69507ca9af5e9f9c91e4f0edd2ee1816189b932c3720ea77cd",
+      "bytes": 1685
     },
     {
       "path": "backtest_BONK_365d.receipt.json",
@@ -48,6 +48,386 @@
       "bytes": 290
     },
     {
+      "path": "ledger/20260715T090057Z_run1/session_1784106057291.receipt.json",
+      "sha256": "b4e70d2509c87f68086c22f9b1d7b700f9f68674d2b684dd13fd8bdc931a16f2",
+      "bytes": 2344
+    },
+    {
+      "path": "ledger/20260715T090057Z_run1/signal_$WIF_1784106057291.receipt.json",
+      "sha256": "67fbd70a889fba4d1a1c081ba8e6e98584e8a1aef9f040552bf8e4a3574fcfa8",
+      "bytes": 3880
+    },
+    {
+      "path": "ledger/20260715T090057Z_run1/signal_Bonk_1784106057291.receipt.json",
+      "sha256": "c15bc7df7791b03e330ce6257918d39d8a14ad5e02e44eea85bc95f6a14c755e",
+      "bytes": 3788
+    },
+    {
+      "path": "ledger/20260715T090057Z_run1/signal_JUP_1784106057291.receipt.json",
+      "sha256": "a292f2e8ec2ca08b9d47155dd28abe26caa1e514515ecf9af873b66498debd89",
+      "bytes": 4172
+    },
+    {
+      "path": "ledger/20260715T090057Z_run1/signal_SOL_1784106057291.receipt.json",
+      "sha256": "47339a81669dc9ced9c53b3633e2d88959de812e8c7ad19c41205e5958fe429f",
+      "bytes": 3884
+    },
+    {
+      "path": "ledger/20260715T092114Z_run2/session_1784107274604.receipt.json",
+      "sha256": "033c0ef3593707f852fdac39b7b43ca4086c7ce7b1bd17868c01046c86447d30",
+      "bytes": 2344
+    },
+    {
+      "path": "ledger/20260715T092114Z_run2/signal_$WIF_1784107274604.receipt.json",
+      "sha256": "3c7a22248dc90a155d191423eb86aee4bc418fdf612ef6779e4a7273b7e28abf",
+      "bytes": 3876
+    },
+    {
+      "path": "ledger/20260715T092114Z_run2/signal_Bonk_1784107274604.receipt.json",
+      "sha256": "33c7076fa3767d70e1700d3cc78f6f2b3784b6b0095bd990dd550d1f1b33fbc6",
+      "bytes": 3788
+    },
+    {
+      "path": "ledger/20260715T092114Z_run2/signal_JUP_1784107274604.receipt.json",
+      "sha256": "2e646c0b248dd72d2e49acf202f5d7a226892afe93c8135d628c2c1263c1bc77",
+      "bytes": 4168
+    },
+    {
+      "path": "ledger/20260715T092114Z_run2/signal_SOL_1784107274604.receipt.json",
+      "sha256": "2b91764ee728a0274efbde8549680206ace62199a76fb0ff8ec1013e4d5eda7b",
+      "bytes": 3880
+    },
+    {
+      "path": "ledger/20260715T092114Z_run2/trackrecord_1784107335804.receipt.json",
+      "sha256": "30db014ecac0e001eae9c39ac9aa7e5956a9ee41f47101c7bb82ad04496fc373",
+      "bytes": 6176
+    },
+    {
+      "path": "ledger/20260715T094346Z_run3/chain_0001.receipt.json",
+      "sha256": "85b2cc4081f1a5a78f2f99ac39e079e381dc6f2943df9744409ff04206e7b010",
+      "bytes": 5364
+    },
+    {
+      "path": "ledger/20260715T094346Z_run3/session_1784108626307.receipt.json",
+      "sha256": "e580e788587c122b490106d0d1159613e290437d27211ca073d0319ba24d5070",
+      "bytes": 2524
+    },
+    {
+      "path": "ledger/20260715T094346Z_run3/signal_$WIF_1784108626307.receipt.json",
+      "sha256": "ac018836dd0814ca17eb4cd714786946321b6544fb58ec1287d5d53988963ba5",
+      "bytes": 3876
+    },
+    {
+      "path": "ledger/20260715T094346Z_run3/signal_Bonk_1784108626307.receipt.json",
+      "sha256": "295429bdc076ed533318eb31065a521987272a33677927b2bac9d13504cb2aef",
+      "bytes": 3788
+    },
+    {
+      "path": "ledger/20260715T094346Z_run3/signal_JTO_1784108626307.receipt.json",
+      "sha256": "4181cf3657aefab4fce76c8074c083e75b40bef4d915bf1ab028d159db7fceae",
+      "bytes": 4064
+    },
+    {
+      "path": "ledger/20260715T094346Z_run3/signal_JUP_1784108626307.receipt.json",
+      "sha256": "021c3c90509d6fc41eba00cfb3c4602faed3aa88174e2a5fd018a311bff3d8f1",
+      "bytes": 4164
+    },
+    {
+      "path": "ledger/20260715T094346Z_run3/signal_PYTH_1784108626307.receipt.json",
+      "sha256": "9a6d55dd14548549d95324deafb1cc1cb9e279bb1785b5007eb3526b77ed1512",
+      "bytes": 4160
+    },
+    {
+      "path": "ledger/20260715T094346Z_run3/signal_SOL_1784108626307.receipt.json",
+      "sha256": "2da1b98801a07966c8bf05795719f69dbf9670ee519889ce16fb7c5b3c252cd4",
+      "bytes": 3876
+    },
+    {
+      "path": "ledger/20260715T094346Z_run3/trackrecord_1784108717206.receipt.json",
+      "sha256": "f6e67dab44ffc8d5f2efe33972b6ab426b6478c4da7a5bbfe323f710680cc4fb",
+      "bytes": 8480
+    },
+    {
+      "path": "ledger/20260715T141549Z_run4/chain_0002.receipt.json",
+      "sha256": "fd4f05512cb6fe4be07a408bbbb2f8398b5b651af7f82dbae41cc7f3c9208cc0",
+      "bytes": 3580
+    },
+    {
+      "path": "ledger/20260715T141549Z_run4/session_1784124948973.receipt.json",
+      "sha256": "3b2e0e3bc1e7fa7663ca0483f808eb3eabaf31a0837aed197a8417a5d2c8bd47",
+      "bytes": 2512
+    },
+    {
+      "path": "ledger/20260715T141549Z_run4/signal_$WIF_1784124948973.receipt.json",
+      "sha256": "f7dfe1ae38cdfc768734a8ce61be5975e7a1511c2a8a01308442de43b27f96d8",
+      "bytes": 3884
+    },
+    {
+      "path": "ledger/20260715T141549Z_run4/signal_Bonk_1784124948973.receipt.json",
+      "sha256": "090be9188cf83654d935a517edfacc20ab0f636f6a0e03fb6c6123b6763bedc8",
+      "bytes": 3784
+    },
+    {
+      "path": "ledger/20260715T141549Z_run4/signal_JTO_1784124948973.receipt.json",
+      "sha256": "dbe5f43f423ffcab653feb6e7576518b8d86165185c3935c567a690659cd8232",
+      "bytes": 4060
+    },
+    {
+      "path": "ledger/20260715T141549Z_run4/signal_JUP_1784124948973.receipt.json",
+      "sha256": "ffbeb5945dfc73b913074715c8bea9b015d874e35acb5d0d7a80f94009ba2c5c",
+      "bytes": 4188
+    },
+    {
+      "path": "ledger/20260715T141549Z_run4/signal_PYTH_1784124948973.receipt.json",
+      "sha256": "01ad7c12ea24e30c55ea442d799ff034c3a3441a45a3723d6616aa99372e58b2",
+      "bytes": 4172
+    },
+    {
+      "path": "ledger/20260715T141549Z_run4/signal_SOL_1784124948973.receipt.json",
+      "sha256": "241d049f75ed44ea5159e4a0941e09479cbe8331862a58fc43593b4ef6de30bf",
+      "bytes": 3880
+    },
+    {
+      "path": "ledger/20260715T141549Z_run4/trackrecord_1784125040146.receipt.json",
+      "sha256": "4cc6a765140c9953002e881b12e61695a8041233b5b72e970d287332cd311e7c",
+      "bytes": 10696
+    },
+    {
+      "path": "ledger/20260715T194057Z_run5/chain_0003.receipt.json",
+      "sha256": "d55dbab8c10416f4492a24f7abffb361c53a88dd3f2225f234141a6be3b1694f",
+      "bytes": 3580
+    },
+    {
+      "path": "ledger/20260715T194057Z_run5/session_1784144457441.receipt.json",
+      "sha256": "40ecdccec4534a9d4bd4c076f114284670dc524f228d85745aa498cb706c5f3f",
+      "bytes": 2524
+    },
+    {
+      "path": "ledger/20260715T194057Z_run5/signal_$WIF_1784144457441.receipt.json",
+      "sha256": "6b76c0a8259011fa5df526de1b1a069cea96449a09f10df01917050c5552ae15",
+      "bytes": 3880
+    },
+    {
+      "path": "ledger/20260715T194057Z_run5/signal_Bonk_1784144457441.receipt.json",
+      "sha256": "fe609e302eba6c5d3874dddfe6d2c357000e8658b8bb0a872ee33a105297787e",
+      "bytes": 3788
+    },
+    {
+      "path": "ledger/20260715T194057Z_run5/signal_JTO_1784144457441.receipt.json",
+      "sha256": "3517c32c22f6bea2c1fb63cee25c968ffb77b5067f8b0535dde8cec5bf33b2b6",
+      "bytes": 4060
+    },
+    {
+      "path": "ledger/20260715T194057Z_run5/signal_JUP_1784144457441.receipt.json",
+      "sha256": "1647b5c08bbe5f5c01ab0ca5cb91213fa6dbf2c69029cc02f22d0bd3fe2cb775",
+      "bytes": 4168
+    },
+    {
+      "path": "ledger/20260715T194057Z_run5/signal_PYTH_1784144457441.receipt.json",
+      "sha256": "40a76845cae4e45ccb8fff85763fc495d0197d8e2bde733e5f2da1213897f7a3",
+      "bytes": 4164
+    },
+    {
+      "path": "ledger/20260715T194057Z_run5/signal_SOL_1784144457441.receipt.json",
+      "sha256": "38cc827ab302e83091b53705f41ba19a084d50ba6bafbea09382f85f46bae866",
+      "bytes": 3880
+    },
+    {
+      "path": "ledger/20260715T194057Z_run5/trackrecord_1784144548470.receipt.json",
+      "sha256": "0e2e2479de6eebed39c095c6de7e34e0662ef67e0c7402c9c4700e8d9a7c3f19",
+      "bytes": 13000
+    },
+    {
+      "path": "ledger/20260716T034408Z_run6/chain_0004.receipt.json",
+      "sha256": "624453a33762c947fb995a1a7a05eec26b0bcdd229db9a8ffdd30a0080712f76",
+      "bytes": 3580
+    },
+    {
+      "path": "ledger/20260716T034408Z_run6/session_1784173448153.receipt.json",
+      "sha256": "dd4c624358c0095126b5ef2c0fb807c12862a3a12186b7e5d1bef8e3f5afccf7",
+      "bytes": 2524
+    },
+    {
+      "path": "ledger/20260716T034408Z_run6/signal_$WIF_1784173448153.receipt.json",
+      "sha256": "c0c7accc6055ef88935a643e1d3c53ae34e5e5ab787c13a5ced01f5e470e06d5",
+      "bytes": 3880
+    },
+    {
+      "path": "ledger/20260716T034408Z_run6/signal_Bonk_1784173448153.receipt.json",
+      "sha256": "b7e312ff060805127d2ef809940e728e70ffc6da7810b5623ac443f6292489fa",
+      "bytes": 3792
+    },
+    {
+      "path": "ledger/20260716T034408Z_run6/signal_JTO_1784173448153.receipt.json",
+      "sha256": "6bda0f475f769f0d744541c4d43a2bcb14990ff3ed3d5c2bb3debce8ee504336",
+      "bytes": 4064
+    },
+    {
+      "path": "ledger/20260716T034408Z_run6/signal_JUP_1784173448153.receipt.json",
+      "sha256": "8d3972ef9274968d0faff53a663dd51e334f23c77d7b23491388b7d47bdce356",
+      "bytes": 4168
+    },
+    {
+      "path": "ledger/20260716T034408Z_run6/signal_PYTH_1784173448153.receipt.json",
+      "sha256": "d2ce69ee7941f7c9ce176693a4cf993ce3b5cdd7f39c57e33ceb0465666db218",
+      "bytes": 4164
+    },
+    {
+      "path": "ledger/20260716T034408Z_run6/signal_SOL_1784173448153.receipt.json",
+      "sha256": "651e61bfcf59dea4d9abb08d29d0c3a88e0b041d59f5971aee211558c988b4f5",
+      "bytes": 3880
+    },
+    {
+      "path": "ledger/20260716T034408Z_run6/trackrecord_1784173539551.receipt.json",
+      "sha256": "b5c47705c4d19f3faa5b0d8221d6a9cf04aef2e205680e0609df93511970505e",
+      "bytes": 15304
+    },
+    {
+      "path": "ledger/20260716T083822Z_run7/chain_0005.receipt.json",
+      "sha256": "8c6ba8b13f1f161e01c0b188efc3fc797666c4ea612d751ff4218e99265e8890",
+      "bytes": 3580
+    },
+    {
+      "path": "ledger/20260716T083822Z_run7/session_1784191102631.receipt.json",
+      "sha256": "80f34267050aad8d3198081600c789f76d69058ccf87f27305ff6d12d9c8cd8c",
+      "bytes": 2524
+    },
+    {
+      "path": "ledger/20260716T083822Z_run7/signal_$WIF_1784191102631.receipt.json",
+      "sha256": "d779b2aeff3e034ec823c960c5a4de490bcebd66aca863fe88574e1015e1cd7a",
+      "bytes": 3884
+    },
+    {
+      "path": "ledger/20260716T083822Z_run7/signal_Bonk_1784191102631.receipt.json",
+      "sha256": "1675caf54993357b3a01e04c8182152f049013f05c6a4d7fc564c9bc35655fb1",
+      "bytes": 3788
+    },
+    {
+      "path": "ledger/20260716T083822Z_run7/signal_JTO_1784191102631.receipt.json",
+      "sha256": "9fa25a5d184352c2450207a755d4fa079f61333cdba679043877e7879da962a5",
+      "bytes": 4060
+    },
+    {
+      "path": "ledger/20260716T083822Z_run7/signal_JUP_1784191102631.receipt.json",
+      "sha256": "8c447a5b89a32f4eef60dda89f2ed91f338fdb5fec4430269e804ee450a39785",
+      "bytes": 4172
+    },
+    {
+      "path": "ledger/20260716T083822Z_run7/signal_PYTH_1784191102631.receipt.json",
+      "sha256": "4b1454c8f67e4ed89853ea7ff0828e23e74c2a40fffeeb151e08d9166013d402",
+      "bytes": 4164
+    },
+    {
+      "path": "ledger/20260716T083822Z_run7/signal_SOL_1784191102631.receipt.json",
+      "sha256": "74ccc07db8beaeb38d021339be8ac603054140f5ee02e8663339b413f754c011",
+      "bytes": 3876
+    },
+    {
+      "path": "ledger/20260716T083822Z_run7/trackrecord_1784191193542.receipt.json",
+      "sha256": "01b044f60b58c4880690e03a4ba75f963c305d452bee5e439b487425b7577ee2",
+      "bytes": 17604
+    },
+    {
+      "path": "ledger/20260716T142836Z_run8/chain_0006.receipt.json",
+      "sha256": "5321fca0578ba57ef2705f623c56a6b6de96734193d05b6a472c7304981a8b7b",
+      "bytes": 3580
+    },
+    {
+      "path": "ledger/20260716T142836Z_run8/session_1784212116335.receipt.json",
+      "sha256": "53ee0e6cdae5d96ebab5eb387c38083ffc2e745cc7fb2de246126c19b59762b6",
+      "bytes": 2524
+    },
+    {
+      "path": "ledger/20260716T142836Z_run8/signal_$WIF_1784212116335.receipt.json",
+      "sha256": "71069775dadd1d7d887cfa8d7939f14d69b1b563e4dd026ed8b1b6bbb819be22",
+      "bytes": 3880
+    },
+    {
+      "path": "ledger/20260716T142836Z_run8/signal_Bonk_1784212116335.receipt.json",
+      "sha256": "965605f48f8af410ac75c68846bd02cab6d4acde20b6196468cf75adf0c66e33",
+      "bytes": 3788
+    },
+    {
+      "path": "ledger/20260716T142836Z_run8/signal_JTO_1784212116335.receipt.json",
+      "sha256": "5493ccc121b6f93ca2664685ea12c9eebd02917fcb705a13d82786d027b50b5f",
+      "bytes": 4060
+    },
+    {
+      "path": "ledger/20260716T142836Z_run8/signal_JUP_1784212116335.receipt.json",
+      "sha256": "7c68bbe68a9192d9be1227a621af29a0950523c03fde52b9227e265df9267ed4",
+      "bytes": 4168
+    },
+    {
+      "path": "ledger/20260716T142836Z_run8/signal_PYTH_1784212116335.receipt.json",
+      "sha256": "a220018434a2c5e33663a3e5ec9b0672145223047e5bfb03a7ccfbdb68e14b8f",
+      "bytes": 4164
+    },
+    {
+      "path": "ledger/20260716T142836Z_run8/signal_SOL_1784212116335.receipt.json",
+      "sha256": "48e36f399be1193b1c0db0759904189537f14c0592aa31d23579706dd3cd3946",
+      "bytes": 3884
+    },
+    {
+      "path": "ledger/20260716T142836Z_run8/trackrecord_1784212207599.receipt.json",
+      "sha256": "0a2b7f57eb3f876be35a9300ad3209cffefbfd0f56a5a6854c119c46199b0f19",
+      "bytes": 19904
+    },
+    {
+      "path": "ledger/20260716T173736Z_run9/book_1784223547921.receipt.json",
+      "sha256": "691201ea765e96589e57ce4db79cdf56240a880199c032780be0172e77b9b810",
+      "bytes": 5560
+    },
+    {
+      "path": "ledger/20260716T173736Z_run9/chain_0007.receipt.json",
+      "sha256": "00e8edb0b8d361ac40e79f8576e7baa8bc73514f32fa858876ed7bbd8547ab6a",
+      "bytes": 3740
+    },
+    {
+      "path": "ledger/20260716T173736Z_run9/session_1784223456544.receipt.json",
+      "sha256": "5044970ea12f9c3e463393bc0f3a73c158c310ec31610c078ccc4a0ef20619a4",
+      "bytes": 2524
+    },
+    {
+      "path": "ledger/20260716T173736Z_run9/signal_$WIF_1784223456544.receipt.json",
+      "sha256": "e534d00ee56e0d9c4d9c7cd32c7447fa0046aa12104b118176da911aca668bb4",
+      "bytes": 3876
+    },
+    {
+      "path": "ledger/20260716T173736Z_run9/signal_Bonk_1784223456544.receipt.json",
+      "sha256": "2fe6dc013912f63b95d093cd6c0bed41d8ee38f56350aee66966c9ae66a67794",
+      "bytes": 3784
+    },
+    {
+      "path": "ledger/20260716T173736Z_run9/signal_JTO_1784223456544.receipt.json",
+      "sha256": "8fbdf020424c576aa8c13080d81b8c3580f520b02b1150f9f0fcd066e0221667",
+      "bytes": 4056
+    },
+    {
+      "path": "ledger/20260716T173736Z_run9/signal_JUP_1784223456544.receipt.json",
+      "sha256": "dbac4cb5e3b933af63680a7522ec292a1ab24b460d97455416f267282376ceff",
+      "bytes": 4168
+    },
+    {
+      "path": "ledger/20260716T173736Z_run9/signal_PYTH_1784223456544.receipt.json",
+      "sha256": "a4243bd7906115afc95fc87a6d073f9e4612556060d3163b38e228790e6580ac",
+      "bytes": 4168
+    },
+    {
+      "path": "ledger/20260716T173736Z_run9/signal_SOL_1784223456544.receipt.json",
+      "sha256": "e9b7b2a759adcd5af94039ea6131f92fed6890ef8becb511f0f23cd5b6d03cd0",
+      "bytes": 3884
+    },
+    {
+      "path": "ledger/20260716T173736Z_run9/trackrecord_1784223547841.receipt.json",
+      "sha256": "b36a733e187154df3e4c0b18b2956ea1456e348a55df61ee56fca16585038313",
+      "bytes": 22208
+    },
+    {
+      "path": "ledger/INDEX.md",
+      "sha256": "268af4e0c8acef102d44f74d84dd24d5eab4b781bc1e026ef0b4f31a8d7fbd81",
+      "bytes": 1423
+    },
+    {
       "path": "session_1784088245451.receipt.json",
       "sha256": "ba298fae87cc2863bf101b90fcd4e87712f302caa659666957760aec0c963231",
       "bytes": 2332
@@ -72,5 +452,18 @@
       "sha256": "b070d85c1cc30dad4eee8952d353a65abbeb7b2ea8da009ba85f4c843993981a",
       "bytes": 3880
     }
-  ]
+  ],
+  "ledger": {
+    "source_branch": "szl-holdings/szl-quant@ledger",
+    "ledger_commit": "be354f523c7cfb694dd67f0a8d64db50e22f8898",
+    "verifier_pin": "d5b174630536a9c3f5008d3d140ddb7048dbcd76",
+    "runs": 9,
+    "files": 76,
+    "mirrored_at_utc": "2026-07-16T17:48:55Z",
+    "verification": "every run dir re-verified (DSSE PAE + ed25519) and the full hash chain walked in lake CI against data/quant/keys/engine_pubkey.json BEFORE this mirror was committed; a verification failure aborts the sync. The mirror follows the ledger branch tip -- ledger_commit records the exact tree mirrored. Honest limit (verifier's own note, kept verbatim): wholesale deletion of the newest link(s) needs external witnesses (Actions logs, INDEX git history)."
+  },
+  "counts": {
+    "genesis_receipts": 9,
+    "ledger_files": 76
+  }
 }
