@@ -1,0 +1,38 @@
+# Copyright 2026 SZL Holdings — SPDX-License-Identifier: Apache-2.0
+name: HF dataset contract
+
+on:
+  pull_request:
+    paths:
+      - "data/khipu/**"
+      - "huggingface/README.md"
+      - "scripts/test_hf_dataset_contract.py"
+      - ".github/workflows/hf-dataset-contract.yml"
+      - ".github/workflows/hf-sync.yml"
+  push:
+    branches: [main, master]
+    paths:
+      - "data/khipu/**"
+      - "huggingface/README.md"
+      - "scripts/test_hf_dataset_contract.py"
+      - ".github/workflows/hf-dataset-contract.yml"
+      - ".github/workflows/hf-sync.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Install contract dependencies
+        run: pip install --quiet "pyarrow>=16,<22" "PyYAML>=6,<7"
+      - name: Validate card metadata, viewer schema, and empty chains
+        run: python scripts/test_hf_dataset_contract.py
+

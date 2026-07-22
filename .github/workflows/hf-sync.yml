@@ -17,9 +17,9 @@ name: Sync data to HF dataset
 #     contents and their SHA3-256 Khipu chains are never modified here.
 #   * It uploads data/** mapped to the dataset ROOT (data/khipu -> khipu, etc.),
 #     matching the dataset's existing layout.
-#   * It deliberately does NOT upload the repo README: the HF dataset card README
-#     carries its own YAML frontmatter (license/tags/pretty_name) that must
-#     survive untouched. Clobbering it would break the dataset card.
+#   * The source-controlled huggingface/README.md is uploaded as the dataset
+#     card before data/**. Its explicit receipts config prevents heterogeneous
+#     lake artifacts from being coerced into one broken viewer table.
 #   * upload_folder is additive — it never deletes the NDJSON viewer copies the
 #     dataset already serves.
 #
@@ -31,6 +31,7 @@ on:
     branches: [main, master]
     paths:
       - "data/**"
+      - "huggingface/README.md"
   workflow_dispatch: {}
 
 permissions:
@@ -64,7 +65,7 @@ jobs:
       - name: Install huggingface_hub
         if: ${{ env.HF_TOKEN != '' }}
         run: pip install --quiet "huggingface_hub>=0.25"
-      - name: Mirror data/** payload to the HF dataset
+      - name: Mirror dataset card and data/** payload to HF
         if: ${{ env.HF_TOKEN != '' }}
         env:
           DATASET_ID: SZLHOLDINGS/szl-lake
@@ -77,6 +78,21 @@ jobs:
           api = HfApi(token=os.environ["HF_TOKEN"])
           repo = os.environ["DATASET_ID"]
           sha_before = api.dataset_info(repo).sha
+          card_commit = api.upload_file(
+              repo_id=repo,
+              repo_type="dataset",
+              path_or_fileobj="huggingface/README.md",
+              path_in_repo="README.md",
+              commit_message=(
+                  "hf-sync: publish viewer-safe dataset card from GitHub "
+                  f"{os.environ.get('GITHUB_SHA','')[:8]}"
+              ),
+              commit_description=(
+                  "Publish the source-controlled card with the homogeneous "
+                  "receipts Parquet config and checked size metadata."
+              ),
+          )
+          print("Card commit:", getattr(card_commit, "commit_url", card_commit))
           commit = api.upload_folder(
               repo_id=repo,
               repo_type="dataset",
@@ -91,8 +107,8 @@ jobs:
               commit_description=(
                   "Verbatim sync of data/** (receipts, keys, papers, sboms, "
                   "trajectories, doctrine). Receipt contents and SHA3-256 Khipu "
-                  "chains are unchanged. README dataset card is intentionally "
-                  "not touched."
+                  "chains are unchanged. The dataset card was published from "
+                  "huggingface/README.md immediately before this payload."
               ),
               ignore_patterns=["**/__pycache__/**", "*.pyc", "**/.pytest_cache/**"],
           )
