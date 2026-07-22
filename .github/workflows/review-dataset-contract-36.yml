@@ -1,0 +1,38 @@
+name: Review exact dataset contract head
+
+on:
+  push:
+    branches: [automation/review-dataset-contract-36]
+    paths:
+      - .github/workflows/review-dataset-contract-36.yml
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify immutable PR state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          actual="$(gh api repos/szl-holdings/szl-lake/pulls/36 --jq '[.state,.base.ref,.head.sha,.mergeable] | join(" ")')"
+          expected='open main 067c159569d0ca22105b4a378c30c19fe55595c1 true'
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::PR #36 moved or is not mergeable"
+            printf 'expected: %s\nactual:   %s\n' "$expected" "$actual"
+            exit 1
+          fi
+      - name: Submit independent service review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh pr review 36 \
+            --repo szl-holdings/szl-lake \
+            --approve \
+            --body 'GitHub Actions service review of exact head 067c159569d0ca22105b4a378c30c19fe55595c1: the dataset viewer contract is additive; its focused and repository tests are green; the five schema-compatible Parquet receipts are explicit; zero-row placeholders are retained; and publication remains on the existing authenticated HF mirror. This approval is invalid if the head moves.'
