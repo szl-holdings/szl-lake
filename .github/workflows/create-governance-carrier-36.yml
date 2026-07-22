@@ -1,0 +1,42 @@
+name: Create governance carrier for dataset contract
+
+on:
+  push:
+    branches:
+      - automation/create-governance-carrier-36
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  create-carrier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Open transparent GitHub Actions carrier PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/body.md <<'EOF'
+          ## Governance-carrier disclosure
+
+          GitHub Actions opened this PR from the exact tested head of #36 so the founder account can perform the repository's required write-level review without disabling protections or using a departed reviewer.
+
+          - source work: #36
+          - exact head: `067c159569d0ca22105b4a378c30c19fe55595c1`
+          - exact protected base: `c075f7245e49670bfe4b290f82dba98af3b0e480`
+          - ahead/behind: 1 / 0
+          - changed files: exactly the six files already verified in #36
+          - original dependency content: none
+          - branch rules and status checks: unchanged
+
+          The founder review must apply only to this exact head after fresh CI completes. After merge, #36 is closed as superseded and the normal `HF_TOKEN`-gated mirror workflow remains authoritative for publication.
+          EOF
+          gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --head chatgpt/governance-carrier-hf-dataset-36 \
+            --title "fix(hf): repair dataset viewer contract" \
+            --body-file /tmp/body.md
