@@ -1,0 +1,28 @@
+{
+  "schema": "szl.khipu.empty-chain-manifest/v1",
+  "purpose": "Declare the byte-identical, fixed-schema, zero-row Parquet placeholders retained for stable per-organ paths.",
+  "artifacts": [
+    {
+      "path": "khipu/a11oy_receipts.parquet",
+      "sha256": "e79d7853a35c8fdda39319e186ff4f9c8332c08203cc5b47eef6e5f71003313e",
+      "rows": 0,
+      "retained": true,
+      "viewer_behavior": "Included in the receipts config; contributes zero rows."
+    },
+    {
+      "path": "khipu/killinchu_receipts.parquet",
+      "sha256": "e79d7853a35c8fdda39319e186ff4f9c8332c08203cc5b47eef6e5f71003313e",
+      "rows": 0,
+      "retained": true,
+      "viewer_behavior": "Included in the receipts config; contributes zero rows."
+    },
+    {
+      "path": "khipu/rosie_receipts.parquet",
+      "sha256": "e79d7853a35c8fdda39319e186ff4f9c8332c08203cc5b47eef6e5f71003313e",
+      "rows": 0,
+      "retained": true,
+      "viewer_behavior": "Included in the receipts config; contributes zero rows."
+    }
+  ]
+}
+
