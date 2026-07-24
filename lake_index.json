@@ -16,7 +16,7 @@
     "sboms",
     "trajectories"
   ],
-  "synced_from_hf_at": "2026-06-12T15:33:14Z",
+  "synced_from_hf_at": "2026-07-24T19:43:01Z",
   "theorem_u_anchor": {
     "chain_index": 1,
     "receipt_id": "d70f444db57df9a4a2d52e69408ce61b511e4b50152f7fbf97456b1af66fe9a0",
@@ -72,7 +72,7 @@
     },
     "locked-baseline": {
       "kind": "locked-baseline",
-      "title": "Locked-proven baseline (Doctrine v11) \u2014 kernel meta-invariants",
+      "title": "Locked-proven baseline (Doctrine v11) — kernel meta-invariants",
       "status": "REAL-invariant",
       "kernel_commit": "25e0b2af781f5fb10324945ea10c861bcc28cc83",
       "kernel_commit_short": "25e0b2af781f",
@@ -101,7 +101,7 @@
   },
   "latest_anchor": {
     "kind": "locked-baseline",
-    "title": "Locked-proven baseline (Doctrine v11) \u2014 kernel meta-invariants",
+    "title": "Locked-proven baseline (Doctrine v11) — kernel meta-invariants",
     "status": "REAL-invariant",
     "kernel_commit": "25e0b2af781f5fb10324945ea10c861bcc28cc83",
     "kernel_commit_short": "25e0b2af781f",
@@ -128,5 +128,5 @@
     "anchored_at_utc": "2026-06-11T02:20:22Z"
   },
   "latest_anchored_at_utc": "2026-06-11T02:20:22Z",
-  "hf_sha": "837af0e9e9a08d5b532123ebd79970b1fb726176"
+  "hf_sha": "d3d210f8ac736ec745ec89f854cfe82ad69725a1"
 }
