@@ -118,7 +118,7 @@ Per-organ fingerprints (SHA-256 of the public key) are pinned in `keys/MANIFEST.
 
 ## Honesty notes (diligence-defensible)
 
-- **`lake build` status:** the published `main` of `szl-holdings/lutar-lean` currently **fails to compile** at `Lutar/KhipuConsensus.lean` (`unknown identifier 'Vector'` under Mathlib v4.13.0; CI run 26786461244). The runtime organs nonetheless serve the locked `749/14/163` constant. The source-level count on `main` HEAD is `774 decl / 14 axioms / 161 noncomment sorries` because it includes additive experimental modules excluded from the locked v11 baseline. See `doctrine/v11_snapshot_20260602.json`.
+- **`lake build` status:** current `szl-holdings/lutar-lean@3f3ad80d` passed both the [Lake build](https://github.com/szl-holdings/lutar-lean/actions/runs/29872221876) and [Lean kernel check](https://github.com/szl-holdings/lutar-lean/actions/runs/29872221989). Those current-main checks are separate from this dataset's locked Doctrine v11 snapshot: receipts remain pinned to kernel commit `c7c0ba17` and the `749/14/163` baseline in `doctrine/v11_snapshot_20260602.json`; additive experimental declarations are not silently promoted into that locked baseline.
 - **Empty chains are shown as empty.** Three organ chains have no receipts yet; their Parquet files are valid but empty rather than padded with synthetic data.
 - **SBOMs and trajectories** are pointer manifests where the corpus has not yet been seeded; the schemas are published so consumers can build against them today.
 
