@@ -35,7 +35,19 @@ jobs:
             exit 1
           fi
           mkdir -p attestations doctrine keys
-          BASE="https://huggingface.co/datasets/SZLHOLDINGS/szl-lake/resolve/main"
+          # HF/CDN 5xx responses are transient in practice. Retry a bounded
+          # number of times, while preserving curl's fail-closed behavior.
+          CURL_RETRY=(--retry 5 --retry-delay 4 --retry-all-errors --connect-timeout 20 --max-time 120)
+          # Resolve the dataset revision once, before any file fetch. Retrying
+          # against mutable `main` could otherwise mix files from two revisions
+          # while recording only the later SHA in lake_index.json.
+          HF_SHA=$(curl -fsSL "${CURL_RETRY[@]}" -H "Authorization: Bearer $HF_TOKEN" \
+            "https://huggingface.co/api/datasets/SZLHOLDINGS/szl-lake" | jq -r .sha)
+          if ! [[ "${HF_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::HF dataset revision is not an immutable 40-hex SHA — refusing an unsafe sync."
+            exit 1
+          fi
+          BASE="https://huggingface.co/datasets/SZLHOLDINGS/szl-lake/resolve/$HF_SHA"
           # No `|| true`: a failed fetch must fail the job, not silently keep a
           # stale file. `curl -f` already exits non-zero on HTTP errors.
           for f in \
@@ -43,15 +55,9 @@ jobs:
             attestations/slsa_level.json \
             doctrine/manifest.json \
             keys/MANIFEST.json; do
-            curl -fsSL -H "Authorization: Bearer $HF_TOKEN" "$BASE/$f" -o "$f"
+            curl -fsSL "${CURL_RETRY[@]}" -H "Authorization: Bearer $HF_TOKEN" "$BASE/$f" -o "$f"
           done
           # Refresh lake_index.json with current timestamp + HF SHA
-          HF_SHA=$(curl -fsSL -H "Authorization: Bearer $HF_TOKEN" \
-            "https://huggingface.co/api/datasets/SZLHOLDINGS/szl-lake" | jq -r .sha)
-          if [ -z "${HF_SHA}" ] || [ "${HF_SHA}" = "null" ]; then
-            echo "::error::Could not read HF dataset SHA — aborting rather than recording a bogus sync."
-            exit 1
-          fi
           jq --arg sha "$HF_SHA" --arg ts "$(date -u +%FT%TZ)" \
             '.hf_sha=$sha | .synced_from_hf_at=$ts' \
             lake_index.json > lake_index.json.tmp && mv lake_index.json.tmp lake_index.json
@@ -60,9 +66,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           # main is branch-protected (DCO + Scorecard required), so a direct bot
-          # push is rejected (GH013). Push to a branch and open/refresh a PR with
-          # best-effort auto-merge instead. No-op when nothing changed.
+          # push is rejected (GH013). Push to a branch and open/refresh a PR for
+          # independent review. No-op when nothing changed.
           if [[ -z "$(git status --porcelain)" ]]; then
             echo "No HF drift; nothing to sync."; exit 0
           fi
@@ -72,11 +79,26 @@ jobs:
           git checkout -B "$BR"
           git add -A
           git commit -s -m "chore(lake): sync from HF $(date -u +%FT%TZ)" -m "Co-Authored-By: Perplexity Computer Agent <agent@perplexity.ai>"
-          git push -f origin "$BR"
-          if ! gh pr view "$BR" --json number >/dev/null 2>&1; then
-            gh pr create --base main --head "$BR" \
-              --title "chore(lake): sync from HF dataset" \
-              --body "Automated sync of attestation/doctrine/key manifests + hf_sha from the SZLHOLDINGS/szl-lake HF dataset. No manual edits." \
-              || echo "::warning title=PR creation blocked for GITHUB_TOKEN::Sync branch $BR is pushed, but this org does not let Actions open PRs (can_approve_pull_request_reviews=false). Open the PR manually; subsequent runs refresh the branch and any open PR. Nothing lands without a reviewed merge."
+          REMOTE_SHA="$(git ls-remote --heads origin "refs/heads/$BR" | awk '{print $1}')"
+          if [ -n "$REMOTE_SHA" ]; then
+            git push --force-with-lease="refs/heads/$BR:$REMOTE_SHA" origin "$BR"
+          else
+            git push origin "$BR"
           fi
-          gh pr merge "$BR" --squash --auto || echo "auto-merge not enabled; PR left open for review."
+          # Query only OPEN PRs. `gh pr view "$BR"` can resolve a historical
+          # closed PR and incorrectly suppress creation for the refreshed branch.
+          OPEN_PR="$(gh pr list --state open --head "$BR" --json number --jq '.[0].number // empty')"
+          if [ -z "$OPEN_PR" ]; then
+            if PR_URL="$(gh pr create --base main --head "$BR" \
+              --title "chore(lake): sync from HF dataset" \
+              --body "Automated sync of attestation/doctrine/key manifests + hf_sha from the SZLHOLDINGS/szl-lake HF dataset. No manual edits.")"; then
+              OPEN_PR="${PR_URL##*/}"
+            else
+              echo "::warning title=PR creation blocked for GITHUB_TOKEN::Sync branch $BR is pushed, but this org does not let Actions open PRs (can_approve_pull_request_reviews=false). Open the PR manually; subsequent runs refresh the branch and any open PR. Nothing lands without a reviewed merge."
+            fi
+          fi
+          if [ -n "$OPEN_PR" ]; then
+            echo "Sync PR #$OPEN_PR is open for independent review; auto-merge is intentionally disabled."
+          else
+            echo "::warning title=Sync branch has no open PR::Branch $BR contains the latest HF sync, but no open PR exists. Manual PR creation remains required."
+          fi
