@@ -64,8 +64,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # main is branch-protected (DCO + Scorecard required), so a direct bot
-          # push is rejected (GH013). Push to a branch and open/refresh a PR with
-          # best-effort auto-merge instead. No-op when nothing changed.
+          # push is rejected (GH013). Push to a branch and open/refresh a PR for
+          # independent review. No-op when nothing changed.
           if [[ -z "$(git status --porcelain)" ]]; then
             echo "No HF drift; nothing to sync."; exit 0
           fi
@@ -89,7 +89,7 @@ jobs:
             fi
           fi
           if [ -n "$OPEN_PR" ]; then
-            gh pr merge "$OPEN_PR" --squash --auto || echo "auto-merge not enabled; PR left open for review."
+            echo "Sync PR #$OPEN_PR is open for independent review; auto-merge is intentionally disabled."
           else
             echo "::warning title=Sync branch has no open PR::Branch $BR contains the latest HF sync, but no open PR exists. Manual PR creation remains required."
           fi
