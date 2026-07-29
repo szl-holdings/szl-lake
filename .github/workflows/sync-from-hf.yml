@@ -43,8 +43,8 @@ jobs:
           # while recording only the later SHA in lake_index.json.
           HF_SHA=$(curl -fsSL "${CURL_RETRY[@]}" -H "Authorization: Bearer $HF_TOKEN" \
             "https://huggingface.co/api/datasets/SZLHOLDINGS/szl-lake" | jq -r .sha)
-          if [ -z "${HF_SHA}" ] || [ "${HF_SHA}" = "null" ]; then
-            echo "::error::Could not read HF dataset SHA — aborting rather than recording a bogus sync."
+          if ! [[ "${HF_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::HF dataset revision is not an immutable 40-hex SHA — refusing an unsafe sync."
             exit 1
           fi
           BASE="https://huggingface.co/datasets/SZLHOLDINGS/szl-lake/resolve/$HF_SHA"
