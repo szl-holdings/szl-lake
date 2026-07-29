@@ -35,10 +35,19 @@ jobs:
             exit 1
           fi
           mkdir -p attestations doctrine keys
-          BASE="https://huggingface.co/datasets/SZLHOLDINGS/szl-lake/resolve/main"
           # HF/CDN 5xx responses are transient in practice. Retry a bounded
           # number of times, while preserving curl's fail-closed behavior.
           CURL_RETRY=(--retry 5 --retry-delay 4 --retry-all-errors --connect-timeout 20 --max-time 120)
+          # Resolve the dataset revision once, before any file fetch. Retrying
+          # against mutable `main` could otherwise mix files from two revisions
+          # while recording only the later SHA in lake_index.json.
+          HF_SHA=$(curl -fsSL "${CURL_RETRY[@]}" -H "Authorization: Bearer $HF_TOKEN" \
+            "https://huggingface.co/api/datasets/SZLHOLDINGS/szl-lake" | jq -r .sha)
+          if [ -z "${HF_SHA}" ] || [ "${HF_SHA}" = "null" ]; then
+            echo "::error::Could not read HF dataset SHA — aborting rather than recording a bogus sync."
+            exit 1
+          fi
+          BASE="https://huggingface.co/datasets/SZLHOLDINGS/szl-lake/resolve/$HF_SHA"
           # No `|| true`: a failed fetch must fail the job, not silently keep a
           # stale file. `curl -f` already exits non-zero on HTTP errors.
           for f in \
@@ -49,12 +58,6 @@ jobs:
             curl -fsSL "${CURL_RETRY[@]}" -H "Authorization: Bearer $HF_TOKEN" "$BASE/$f" -o "$f"
           done
           # Refresh lake_index.json with current timestamp + HF SHA
-          HF_SHA=$(curl -fsSL "${CURL_RETRY[@]}" -H "Authorization: Bearer $HF_TOKEN" \
-            "https://huggingface.co/api/datasets/SZLHOLDINGS/szl-lake" | jq -r .sha)
-          if [ -z "${HF_SHA}" ] || [ "${HF_SHA}" = "null" ]; then
-            echo "::error::Could not read HF dataset SHA — aborting rather than recording a bogus sync."
-            exit 1
-          fi
           jq --arg sha "$HF_SHA" --arg ts "$(date -u +%FT%TZ)" \
             '.hf_sha=$sha | .synced_from_hf_at=$ts' \
             lake_index.json > lake_index.json.tmp && mv lake_index.json.tmp lake_index.json
