@@ -63,6 +63,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           # main is branch-protected (DCO + Scorecard required), so a direct bot
           # push is rejected (GH013). Push to a branch and open/refresh a PR for
           # independent review. No-op when nothing changed.
@@ -75,7 +76,12 @@ jobs:
           git checkout -B "$BR"
           git add -A
           git commit -s -m "chore(lake): sync from HF $(date -u +%FT%TZ)" -m "Co-Authored-By: Perplexity Computer Agent <agent@perplexity.ai>"
-          git push -f origin "$BR"
+          REMOTE_SHA="$(git ls-remote --heads origin "refs/heads/$BR" | awk '{print $1}')"
+          if [ -n "$REMOTE_SHA" ]; then
+            git push --force-with-lease="refs/heads/$BR:$REMOTE_SHA" origin "$BR"
+          else
+            git push origin "$BR"
+          fi
           # Query only OPEN PRs. `gh pr view "$BR"` can resolve a historical
           # closed PR and incorrectly suppress creation for the refreshed branch.
           OPEN_PR="$(gh pr list --state open --head "$BR" --json number --jq '.[0].number // empty')"
