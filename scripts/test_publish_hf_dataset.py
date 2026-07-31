@@ -1,5 +1,7 @@
 import json
 import unittest
+from pathlib import Path
+from unittest import mock
 
 import publish_hf_dataset as publisher
 
@@ -36,6 +38,18 @@ class PublishDatasetTests(unittest.TestCase):
                 token="",
                 report_path=publisher.ROOT / "reports" / "unused.json",
             )
+
+    def test_symlink_payload_is_refused_before_read(self) -> None:
+        original = Path.is_symlink
+
+        def report_one_link(path: Path) -> bool:
+            if path.name == "amaru_receipts.parquet":
+                return True
+            return original(path)
+
+        with mock.patch.object(Path, "is_symlink", report_one_link):
+            with self.assertRaisesRegex(publisher.PublicationError, "symlink"):
+                publisher.source_payloads("a" * 40)
 
 
 if __name__ == "__main__":

@@ -41,6 +41,10 @@ def source_payloads(source_revision: str) -> dict[str, bytes]:
         "LICENSE": (ROOT / "LICENSE").read_bytes(),
     }
     for path in sorted(DATA.rglob("*")):
+        if path.is_symlink():
+            raise PublicationError(
+                f"source payload contains a symlink and is refused: {path.relative_to(DATA)}"
+            )
         if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc":
             payloads[path.relative_to(DATA).as_posix()] = path.read_bytes()
     if len(payloads) < 3:
