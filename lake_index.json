@@ -16,7 +16,7 @@
     "sboms",
     "trajectories"
   ],
-  "synced_from_hf_at": "2026-07-29T17:45:05Z",
+  "synced_from_hf_at": "2026-08-08T18:53:48Z",
   "theorem_u_anchor": {
     "chain_index": 1,
     "receipt_id": "d70f444db57df9a4a2d52e69408ce61b511e4b50152f7fbf97456b1af66fe9a0",
@@ -128,5 +128,5 @@
     "anchored_at_utc": "2026-06-11T02:20:22Z"
   },
   "latest_anchored_at_utc": "2026-06-11T02:20:22Z",
-  "hf_sha": "eac5f405f2570a5e318db5726ceb6e03dc812779"
+  "hf_sha": "cad10a442de3c52c4cbdb7613e806a7f6cb83f6a"
 }
