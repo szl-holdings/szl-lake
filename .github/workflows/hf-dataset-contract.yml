@@ -4,16 +4,22 @@ name: HF dataset contract
 on:
   pull_request:
     paths:
-      - "data/khipu/**"
+      - "data/**"
       - "huggingface/README.md"
+      - "LICENSE"
+      - "scripts/publish_hf_dataset.py"
+      - "scripts/test_publish_hf_dataset.py"
       - "scripts/test_hf_dataset_contract.py"
       - ".github/workflows/hf-dataset-contract.yml"
       - ".github/workflows/hf-sync.yml"
   push:
     branches: [main, master]
     paths:
-      - "data/khipu/**"
+      - "data/**"
       - "huggingface/README.md"
+      - "LICENSE"
+      - "scripts/publish_hf_dataset.py"
+      - "scripts/test_publish_hf_dataset.py"
       - "scripts/test_hf_dataset_contract.py"
       - ".github/workflows/hf-dataset-contract.yml"
       - ".github/workflows/hf-sync.yml"
@@ -32,7 +38,13 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install contract dependencies
-        run: pip install --quiet "pyarrow>=16,<22" "PyYAML>=6,<7"
+        run: pip install --quiet "pyarrow>=16,<22" "PyYAML>=6,<7" "huggingface_hub==1.23.0"
+      - name: Reject a stale or malformed checked source index
+        run: python scripts/publish_hf_dataset.py --check-index
+      - name: Test atomic publication and complete-tree readback
+        env:
+          PYTHONPATH: scripts
+        run: python scripts/test_publish_hf_dataset.py
       - name: Validate card metadata, viewer schema, and empty chains
         run: python scripts/test_hf_dataset_contract.py
 
