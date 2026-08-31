@@ -36,7 +36,6 @@ from szl_lake_store import (  # noqa: E402
     ReceiptLedger,
     canonical_hash,
 )
-import szl_lake_store  # noqa: E402
 import szl_lake_server  # noqa: E402
 import szl_lake_client  # noqa: E402
 
