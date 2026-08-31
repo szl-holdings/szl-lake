@@ -45,7 +45,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install exact publication client
-        run: python -m pip install --disable-pip-version-check "huggingface_hub==1.23.0"
+        run: >-
+          python -m pip install --disable-pip-version-check
+          "pyarrow>=16,<22" "huggingface_hub==1.23.0"
       - name: Test the publication contract offline
         env:
           PYTHONPATH: scripts
