@@ -6,6 +6,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+import pyarrow as pa
+import pyarrow.parquet as parquet
+
 import publish_hf_dataset as publisher
 
 
@@ -100,6 +103,12 @@ class FakeDownloader:
 
 
 class PublishDatasetTests(unittest.TestCase):
+    @staticmethod
+    def parquet_receipts(count: int) -> bytes:
+        body = io.BytesIO()
+        parquet.write_table(pa.table({"id": list(range(count))}), body)
+        return body.getvalue()
+
     def test_source_payload_is_complete_hash_bound_and_licensed(self) -> None:
         payloads = publisher.source_payloads("a" * 40)
         self.assertIn("README.md", payloads)
@@ -143,6 +152,17 @@ class PublishDatasetTests(unittest.TestCase):
             with self.assertRaisesRegex(publisher.PublicationError, "symlink"):
                 publisher.source_payloads("a" * 40)
 
+    def test_card_and_license_symlinks_are_refused_before_read(self) -> None:
+        original = Path.is_symlink
+        for linked_name in ("README.md", "LICENSE"):
+            with self.subTest(linked_name=linked_name):
+                def report_fixed_link(path: Path, name: str = linked_name) -> bool:
+                    return path.name == name or original(path)
+
+                with mock.patch.object(Path, "is_symlink", report_fixed_link):
+                    with self.assertRaisesRegex(publisher.PublicationError, "symlink"):
+                        publisher.source_payloads("a" * 40)
+
     def test_repo_path_rejects_traversal_absolute_backslash_and_controls(self) -> None:
         for value in (
             "../x", "a/../x", "/x", "C:/x", r"a\x", "a//x", "a/./x", "a\x00b"
@@ -167,10 +187,12 @@ class PublishDatasetTests(unittest.TestCase):
         source = {
             "README.md": b"card",
             "khipu/lutar_lean_receipts.ndjson": b'{"id":1}\n{"id":2}\n',
+            "khipu/sentra_receipts.parquet": self.parquet_receipts(2),
         }
         preserved = {
             ".gitattributes": b"lfs",
             "khipu/amaru_receipts.ndjson": b'{"id":3}\n',
+            "khipu/amaru_receipts.parquet": self.parquet_receipts(3),
             "legacy/evidence.json": b"legacy",
         }
         first = publisher.build_lake_index(
@@ -188,8 +210,8 @@ class PublishDatasetTests(unittest.TestCase):
         self.assertEqual(first, second)
         index = json.loads(first)
         self.assertEqual(index["schema"], "szl.lake.index/v2")
-        self.assertEqual(index["closure"]["indexed_file_count"], 5)
-        self.assertEqual(index["closure"]["published_file_count_including_index"], 6)
+        self.assertEqual(index["closure"]["indexed_file_count"], 7)
+        self.assertEqual(index["closure"]["published_file_count_including_index"], 8)
         self.assertEqual(index["self_reference"]["path"], "lake_index.json")
         self.assertNotIn("lake_index.json", {item["path"] for item in index["files"]})
         entries = {item["path"]: item for item in index["files"]}
@@ -200,8 +222,20 @@ class PublishDatasetTests(unittest.TestCase):
         self.assertEqual(
             entries[".gitattributes"]["origin"], publisher.INFRASTRUCTURE_ORIGIN
         )
-        self.assertEqual(index["khipu_receipt_counts"], {"amaru": 1, "lutar_lean": 2})
-        self.assertEqual(index["total_khipu_receipts"], 3)
+        self.assertEqual(
+            index["khipu_receipt_counts"],
+            {"amaru": 4, "lutar_lean": 2, "sentra": 2},
+        )
+        self.assertEqual(index["total_khipu_receipts"], 8)
+
+    def test_malformed_parquet_receipts_fail_before_publication(self) -> None:
+        with self.assertRaisesRegex(publisher.PublicationError, "valid Parquet"):
+            publisher.build_lake_index(
+                source_revision="a" * 40,
+                predecessor_revision="b" * 40,
+                source={"khipu/a_receipts.parquet": b"not-parquet"},
+                preserved={},
+            )
 
     def test_build_index_rejects_generated_path_overlap_and_non_bytes(self) -> None:
         with self.assertRaisesRegex(publisher.PublicationError, "generated index"):
