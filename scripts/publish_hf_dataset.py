@@ -12,6 +12,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Callable
 
+import pyarrow.parquet as parquet
 from huggingface_hub import CommitOperationAdd, HfApi, hf_hub_download
 
 
@@ -22,7 +23,9 @@ INDEX_PATH = "lake_index.json"
 REPO_ID = "SZLHOLDINGS/szl-lake"
 SOURCE_REPOSITORY = "szl-holdings/szl-lake"
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
-RECEIPT_PATH = re.compile(r"^khipu/([a-z0-9_]+)_receipts\.ndjson$")
+RECEIPT_PATH = re.compile(
+    r"^khipu/([a-z0-9_]+)_receipts\.(ndjson|parquet)$"
+)
 MAX_REPOSITORY_FILES = 10_000
 MAX_REMOTE_FILE_BYTES = 128 * 1024 * 1024
 MAX_REMOTE_TOTAL_BYTES = 512 * 1024 * 1024
@@ -106,10 +109,17 @@ def validated_repo_path(value: object) -> str:
 
 
 def static_source_payloads() -> dict[str, bytes]:
-    payloads: dict[str, bytes] = {
-        "README.md": (ROOT / "huggingface" / "README.md").read_bytes(),
-        "LICENSE": (ROOT / "LICENSE").read_bytes(),
+    fixed_paths = {
+        "README.md": ROOT / "huggingface" / "README.md",
+        "LICENSE": ROOT / "LICENSE",
     }
+    payloads: dict[str, bytes] = {}
+    for relative, path in fixed_paths.items():
+        if path.is_symlink():
+            raise PublicationError(
+                f"source payload contains a symlink and is refused: {relative}"
+            )
+        payloads[relative] = path.read_bytes()
     for path in sorted(DATA.rglob("*")):
         if path.is_symlink():
             raise PublicationError(
@@ -258,28 +268,36 @@ def capture_remote_only_payloads(
     return captured
 
 
-def ndjson_receipt_counts(payloads: dict[str, bytes]) -> tuple[dict[str, int], dict[str, int]]:
+def receipt_counts(payloads: dict[str, bytes]) -> tuple[dict[str, int], dict[str, int]]:
     organ_counts: Counter[str] = Counter()
     file_counts: dict[str, int] = {}
     for path, body in sorted(payloads.items()):
         match = RECEIPT_PATH.fullmatch(path)
         if match is None:
             continue
-        try:
-            text = body.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise PublicationError(f"receipt file is not UTF-8: {path}") from exc
-        count = 0
-        for number, line in enumerate(text.splitlines(), start=1):
-            if not line.strip():
-                continue
+        if match.group(2) == "parquet":
             try:
-                receipt = json.loads(line)
-            except json.JSONDecodeError as exc:
-                raise PublicationError(f"receipt file has invalid JSON at {path}:{number}") from exc
-            if not isinstance(receipt, dict):
-                raise PublicationError(f"receipt is not an object at {path}:{number}")
-            count += 1
+                count = parquet.read_metadata(io.BytesIO(body)).num_rows
+            except Exception as exc:
+                raise PublicationError(f"receipt file is not valid Parquet: {path}") from exc
+        else:
+            try:
+                text = body.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise PublicationError(f"receipt file is not UTF-8: {path}") from exc
+            count = 0
+            for number, line in enumerate(text.splitlines(), start=1):
+                if not line.strip():
+                    continue
+                try:
+                    receipt = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise PublicationError(
+                        f"receipt file has invalid JSON at {path}:{number}"
+                    ) from exc
+                if not isinstance(receipt, dict):
+                    raise PublicationError(f"receipt is not an object at {path}:{number}")
+                count += 1
         file_counts[path] = count
         organ_counts[match.group(1)] += count
     return dict(sorted(organ_counts.items())), file_counts
@@ -316,7 +334,7 @@ def build_lake_index(
         })
     entries.sort(key=lambda item: item["path"])
     combined = {**normalized_source, **normalized_preserved}
-    organ_counts, receipt_file_counts = ndjson_receipt_counts(combined)
+    organ_counts, receipt_file_counts = receipt_counts(combined)
     origin_counts = dict(sorted(Counter(item["origin"] for item in entries).items()))
     index = {
         "schema": "szl.lake.index/v2",
