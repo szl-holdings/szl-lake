@@ -211,7 +211,7 @@ def main() -> int:
             print(f"[{status}] {name}: exit={code} (expected {want})")
             if not ok:
                 tail = "\n".join(out.strip().splitlines()[-6:])
-                print(f"        --- verifier output (tail) ---\n        "
+                print("        --- verifier output (tail) ---\n        "
                       + tail.replace("\n", "\n        "))
                 failures.append(name)
 
