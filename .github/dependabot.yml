@@ -15,4 +15,16 @@ updates:
     groups:
       actions:
         patterns:
-          - "*"
+        - '*'
+        update-types:
+        - minor
+        - patch
+        exclude-patterns:
+        - torch*
+        - transformers
+        - accelerate
+        - vllm
+        - unsloth*
+        - openai
+    cooldown:
+      default-days: 3

@@ -35,31 +35,34 @@ name: Verify Anchor Receipts (real cosign)
 
 on:
   push:
-    branches: [main]
+    branches:
+    - main
     paths:
-      - 'scripts/verify_lutar_lean_receipts.py'
-      - 'scripts/test_verify_lutar_lean_receipts_real.py'
-      - 'data/khipu/lutar_lean_receipts.ndjson'
-      - '.github/workflows/verify-anchor-receipts-real.yml'
+    - scripts/verify_lutar_lean_receipts.py
+    - scripts/test_verify_lutar_lean_receipts_real.py
+    - data/khipu/lutar_lean_receipts.ndjson
+    - .github/workflows/verify-anchor-receipts-real.yml
   pull_request:
     paths:
-      - 'scripts/verify_lutar_lean_receipts.py'
-      - 'scripts/test_verify_lutar_lean_receipts_real.py'
-      - 'data/khipu/lutar_lean_receipts.ndjson'
-      - '.github/workflows/verify-anchor-receipts-real.yml'
+    - scripts/verify_lutar_lean_receipts.py
+    - scripts/test_verify_lutar_lean_receipts_real.py
+    - data/khipu/lutar_lean_receipts.ndjson
+    - .github/workflows/verify-anchor-receipts-real.yml
   workflow_dispatch:
     inputs:
       reason:
-        description: 'Manual trigger reason'
+        description: Manual trigger reason
         required: false
-        default: 'manual real-verify'
-
+        default: manual real-verify
+  merge_group:
+    types:
+    - checks_requested
 permissions:
   contents: read
 
 concurrency:
   group: verify-anchor-receipts-real-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'merge_group' }}
 
 env:
   COSIGN_VERSION: v2.4.1
