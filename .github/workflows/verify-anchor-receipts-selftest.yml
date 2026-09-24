@@ -26,31 +26,33 @@ name: Verify Anchor Receipts (self-test)
 
 on:
   push:
-    branches: [main]
+    branches:
+    - main
     paths:
-      - 'scripts/verify_lutar_lean_receipts.py'
-      - 'scripts/test_verify_lutar_lean_receipts.py'
-      - '.github/workflows/verify-anchor-receipts-selftest.yml'
-  # Runs on EVERY pull request (no path filter) so it can serve as a REQUIRED
-  # status check on main without the "skipped but required" trap: a path-filtered
-  # required check never reports on unrelated PRs and would block them forever.
-  # This matches the always-run sibling required guards (Doctrine, Overclaim).
-  # The self-test is offline + stdlib-only, so running it on every PR is cheap.
+    - scripts/verify_lutar_lean_receipts.py
+    - scripts/test_verify_lutar_lean_receipts.py
+    - .github/workflows/verify-anchor-receipts-selftest.yml
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types:
+    - opened
+    - synchronize
+    - reopened
+    - ready_for_review
   workflow_dispatch:
     inputs:
       reason:
-        description: 'Manual trigger reason'
+        description: Manual trigger reason
         required: false
-        default: 'manual self-test'
-
+        default: manual self-test
+  merge_group:
+    types:
+    - checks_requested
 permissions:
   contents: read
 
 concurrency:
   group: verify-anchor-receipts-selftest-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'merge_group' }}
 
 jobs:
   selftest:
