@@ -21,7 +21,7 @@ Proof: [a11oy.net](https://a11oy.net)
 > **GitHub front door.** This repository holds the README, small JSON indexes, and manifest pointers. The **HF dataset is canonical** for all NDJSON receipts and large binaries:
 > **[huggingface.co/datasets/SZLHOLDINGS/szl-lake](https://huggingface.co/datasets/SZLHOLDINGS/szl-lake)**
 
-The SZL Data Lake is the diligence-defensible corpus of governance receipts for SZL Holdings. Every governed action in the SZL substrate emits an ECDSA P-256 DSSE-signed **Khipu receipt** onto a hash-linked Merkle DAG. This dataset aggregates those receipts with formal-verification doctrine snapshots, the Zenodo paper record, SBOM pointers, and compliance attestations — so a reviewer can verify claims end-to-end.
+The SZL Data Lake is the diligence-defensible corpus of governance receipts for SZL Holdings. Signed **Khipu receipts** are aggregated here where available (today: amaru 14/14 verified) on a hash-linked Merkle DAG. This dataset aggregates those receipts with formal-verification doctrine snapshots, the Zenodo paper record, SBOM pointers, and compliance attestations — so a reviewer can verify claims end-to-end.
 
 **Doctrine v11 LOCKED · 749 declarations / 14 unique axioms / 163 tracked sorries · kernel commit [`c7c0ba17`](https://github.com/szl-holdings/lutar-lean/commit/c7c0ba17)**
 
