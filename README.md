@@ -21,7 +21,7 @@ Proof: [a11oy.net](https://a11oy.net)
 > **GitHub front door.** This repository holds the README, small JSON indexes, and manifest pointers. The **HF dataset is canonical** for all NDJSON receipts and large binaries:
 > **[huggingface.co/datasets/SZLHOLDINGS/szl-lake](https://huggingface.co/datasets/SZLHOLDINGS/szl-lake)**
 
-The SZL Data Lake is the diligence-defensible corpus of governance receipts for SZL Holdings. Every governed action in the SZL substrate emits an ECDSA P-256 DSSE-signed **Khipu receipt** onto a hash-linked Merkle DAG. This dataset aggregates those receipts with formal-verification doctrine snapshots, the Zenodo paper record, SBOM pointers, and compliance attestations — so a reviewer can verify claims end-to-end.
+The SZL Data Lake is the diligence-defensible corpus of governance receipts for SZL Holdings. Signed **Khipu receipts** are aggregated here where available, on a hash-linked Merkle DAG. This dataset aggregates those receipts with formal-verification doctrine snapshots, the Zenodo paper record, SBOM pointers, and compliance attestations — so a reviewer can verify claims end-to-end. As of 2026-09-25, amaru is the only per-organ Parquet chain in `data/khipu/` whose rows carry signatures. Those signatures verify against `data/keys/org-cosign.pub` (served on the HF dataset as `keys/org-cosign.pub`), not against the key linked from each row's `verify_key_url`.
 
 **Doctrine v11 LOCKED · 749 declarations / 14 unique axioms / 163 tracked sorries · kernel commit [`c7c0ba17`](https://github.com/szl-holdings/lutar-lean/commit/c7c0ba17)**
 
@@ -34,7 +34,7 @@ The SZL Data Lake is the diligence-defensible corpus of governance receipts for 
 | `attestations/` | Section 889 (5 vendors), SLSA L1-honest level record, supply-chain self-attestation (no FedRAMP / Iron Bank / CMMC claimed) |
 | `doctrine/` | v11 snapshot (749 declarations · 14 axioms · 163 sorries) pinned to kernel commit `c7c0ba17` |
 | `keys/` | ECDSA P-256 cosign public keys per product |
-| `khipu/` | DSSE-signed Khipu receipts (NDJSON, append-only) |
+| `khipu/` | Khipu receipts (NDJSON, append-only); not every chain carries signatures (see above) |
 | `papers/` | Zenodo paper record references |
 | `sboms/` | CycloneDX SBOM pointers |
 | `trajectories/` | Bounded-recursion execution traces |
@@ -63,7 +63,7 @@ bash, python3, node ≥ 18.
 ### 1 — Fetch receipts from HF (canonical source)
 
 ```bash
-# Pull a Khipu receipt stream (NDJSON, one signed receipt per line)
+# Pull a Khipu receipt stream (NDJSON, one receipt per line)
 curl -fsSL \
   "https://huggingface.co/datasets/SZLHOLDINGS/szl-lake/resolve/main/khipu/a11oy_receipts.ndjson" \
   -o a11oy_receipts.ndjson
