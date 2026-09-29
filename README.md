@@ -199,8 +199,8 @@ See [`lake_index.json`](lake_index.json) for the current pointer manifest (HF SH
 
 | Workflow | Direction | Scope |
 |---|---|---|
-| [`sync-from-hf.yml`](.github/workflows/sync-from-hf.yml) | HF → GH | Refreshes the small attestation/doctrine/key manifests + records the current HF SHA in `lake_index.json` (every 6h). |
-| [`hf-sync.yml`](.github/workflows/hf-sync.yml) | GH → HF | On push to `main` touching `data/**` or `huggingface/README.md`, publishes the source-controlled dataset card and mirrors the receipt/data payload (`data/**`) verbatim to the HF dataset so external verifiers never lag behind GitHub. Receipt contents and their SHA3-256 Khipu chains are never modified. Requires repo secret `HF_TOKEN` (write). |
+| [`sync-from-hf.yml`](.github/workflows/sync-from-hf.yml) | HF → GH | Refreshes the small attestation/doctrine/key manifests + records the current HF SHA in `lake_index.json` (every 6h). Reads the public dataset anonymously; holds no Hugging Face credential. |
+| [`hf-sync.yml`](.github/workflows/hf-sync.yml) | GH → HF | On push to `main` touching `data/**` or `huggingface/README.md`, publishes the source-controlled dataset card and mirrors the receipt/data payload (`data/**`) verbatim to the HF dataset so external verifiers never lag behind GitHub. Receipt contents and their SHA3-256 Khipu chains are never modified. The writing job holds the lock `hf-write/dataset/SZLHOLDINGS/szl-lake` and uses repo secret `HF_ORG_TOKEN` (falling back to `HF_TOKEN`) with write access. |
 
 ---
 
