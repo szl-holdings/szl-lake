@@ -25,15 +25,39 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: hf-sync-dataset-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
+  contract:
+    name: Offline publication contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install exact publication client
+        run: >-
+          python -m pip install --disable-pip-version-check
+          "pyarrow>=16,<22" "huggingface_hub==2.0.0"
+      - name: Test the publication contract offline
+        env:
+          PYTHONPATH: scripts
+        run: python scripts/test_publish_hf_dataset.py
+
   sync:
     name: Atomic publish and immutable readback
+    needs: contract
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # One lock per Hub asset (plan D3). Only the writing job holds it, so
+    # pull-request test runs never queue behind (or cancel) a publication.
+    concurrency:
+      group: hf-write/dataset/SZLHOLDINGS/szl-lake
+      cancel-in-progress: false
     env:
       HF_TOKEN: ${{ secrets.HF_ORG_TOKEN || secrets.HF_TOKEN }}
     steps:
@@ -47,25 +71,21 @@ jobs:
       - name: Install exact publication client
         run: >-
           python -m pip install --disable-pip-version-check
-          "pyarrow>=16,<22" "huggingface_hub==1.23.0"
-      - name: Test the publication contract offline
-        env:
-          PYTHONPATH: scripts
-        run: python scripts/test_publish_hf_dataset.py
+          "pyarrow>=16,<22" "huggingface_hub==2.0.0"
       - name: Require Hugging Face write credential
-        if: ${{ github.event_name != 'pull_request' && env.HF_TOKEN == '' }}
+        if: ${{ env.HF_TOKEN == '' }}
         run: |
           echo "::error title=HF_TOKEN missing::Exact SZL Lake publication requires an approved Hugging Face write token."
           exit 1
       - name: Publish one atomic revision and read back every canonical byte
-        if: ${{ github.event_name != 'pull_request' && env.HF_TOKEN != '' }}
+        if: ${{ env.HF_TOKEN != '' }}
         run: |
           set -euo pipefail
           python scripts/publish_hf_dataset.py \
             --source-revision "$GITHUB_SHA" \
             --report reports/lake-publication.json
       - name: Upload immutable publication evidence
-        if: ${{ always() && github.event_name != 'pull_request' }}
+        if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: szl-lake-publication-${{ github.run_id }}

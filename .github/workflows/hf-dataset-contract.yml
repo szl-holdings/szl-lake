@@ -10,8 +10,11 @@ on:
       - "scripts/publish_hf_dataset.py"
       - "scripts/test_publish_hf_dataset.py"
       - "scripts/test_hf_dataset_contract.py"
+      - "scripts/test_hf_workflow_contract.py"
       - ".github/workflows/hf-dataset-contract.yml"
       - ".github/workflows/hf-sync.yml"
+      - ".github/workflows/sync-from-hf.yml"
+      - ".github/workflows/verify-anchor-receipts.yml"
   push:
     branches: [main, master]
     paths:
@@ -21,8 +24,11 @@ on:
       - "scripts/publish_hf_dataset.py"
       - "scripts/test_publish_hf_dataset.py"
       - "scripts/test_hf_dataset_contract.py"
+      - "scripts/test_hf_workflow_contract.py"
       - ".github/workflows/hf-dataset-contract.yml"
       - ".github/workflows/hf-sync.yml"
+      - ".github/workflows/sync-from-hf.yml"
+      - ".github/workflows/verify-anchor-receipts.yml"
   workflow_dispatch: {}
 
 permissions:
@@ -38,7 +44,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install contract dependencies
-        run: pip install --quiet "pyarrow>=16,<22" "PyYAML>=6,<7" "huggingface_hub==1.23.0"
+        run: pip install --quiet "pyarrow>=16,<22" "PyYAML>=6,<7" "huggingface_hub==2.0.0"
       - name: Reject a stale or malformed checked source index
         run: python scripts/publish_hf_dataset.py --check-index
       - name: Test atomic publication and complete-tree readback
@@ -47,4 +53,6 @@ jobs:
         run: python scripts/test_publish_hf_dataset.py
       - name: Validate card metadata, viewer schema, and empty chains
         run: python scripts/test_hf_dataset_contract.py
+      - name: Validate the publisher lock, client pin, and anonymous readers
+        run: python scripts/test_hf_workflow_contract.py
 
