@@ -388,8 +388,9 @@ class ReceiptLedger:
              canonical link object, so mutating any COMMITTED link field
              (``prev_hash``/``receipt_id``/``organ``/``ts``/``chain_index``)
              is detected, and
-          4. the stored ``receipt_id`` still EQUALS ``receipt_identity`` of the
-             stored receipt body — which binds a content-addressed (id-less)
+          4. the stored receipt body is a JSON object, and the stored
+             ``receipt_id`` still EQUALS ``receipt_identity`` of that body,
+             which binds a content-addressed (id-less)
              receipt's entire body to the chain and detects tampering of an
              id-bearing receipt's identity field.
 
@@ -473,7 +474,13 @@ class ReceiptLedger:
                             })
 
                         receipt = env.get("receipt")
-                        if isinstance(receipt, dict):
+                        if not isinstance(receipt, dict):
+                            broken.append({
+                                "position": pos,
+                                "kind": "malformed_receipt",
+                                "detail": "stored receipt body must be a JSON object",
+                            })
+                        else:
                             try:
                                 rid = receipt_identity(receipt)
                             except Exception:  # noqa: BLE001
