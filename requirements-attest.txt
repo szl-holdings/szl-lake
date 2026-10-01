@@ -6,4 +6,4 @@
 # receipt spine via szl_lake_receipt.emit_lake_receipt(...). Pinned exactly to
 # the canonical library release (v0.2.0), the same pin every other spine
 # producer (yarqa, governed-inference-meter) uses.
-szl-receipt==0.2.0
+szl-receipt-dsse==0.3.1
