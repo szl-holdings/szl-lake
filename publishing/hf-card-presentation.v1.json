@@ -1,0 +1,30 @@
+{
+  "schema": "szl.source-card-presentation/v1",
+  "source_repository": "szl-holdings/szl-lake",
+  "source_revision": "8826fdb5fa4de4cdab64c33ec22aacf793d0f564",
+  "cards": [
+    {
+      "kind": "datasets",
+      "repo_id": "SZLHOLDINGS/szl-lake",
+      "source_path": "huggingface/README.md",
+      "source_url": "https://github.com/szl-holdings/szl-lake/blob/8826fdb5fa4de4cdab64c33ec22aacf793d0f564/huggingface/README.md",
+      "observed_hub_revision": "1d5610243834cf8f898ee40555e93deba8bbf195",
+      "observed_hub_card_sha256": "b7a4941802d19d0d84fb8c1077db16c0407592192dd067cf55d856cbb2ee6630",
+      "observed_at": "2026-10-04T16:10:16.604981+00:00",
+      "canonical_publisher": "https://github.com/szl-holdings/szl-lake/blob/8826fdb5fa4de4cdab64c33ec22aacf793d0f564/.github/workflows/hf-sync.yml",
+      "publication_trigger": "PROTECTED_MAIN_PUSH",
+      "publication_state": "SOURCE_REVIEW_PENDING",
+      "artifact": "Governance evidence archive",
+      "stage": "Verify individual records",
+      "before_sha256": "b7a4941802d19d0d84fb8c1077db16c0407592192dd067cf55d856cbb2ee6630",
+      "after_sha256": "cd8f135cdcb09a4ce3d30d1aa9dce05baf08c16dbfaea35b826eea02ed983116",
+      "front_matter_sha256": "3843cdfeb4cb05a1bdb461384846aeb468215fc8079cc8f023cb60503421b735",
+      "preserved_body_sha256": "d29d0128af43cab74bb84002978226549374fd91cc12733a8b570a2585367989",
+      "bytes_before": 7698,
+      "bytes_after": 8982,
+      "front_matter_preserved": true,
+      "original_body_preserved": true,
+      "provider_or_runtime_promotion": false
+    }
+  ]
+}

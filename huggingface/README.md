@@ -26,6 +26,28 @@ configs:
         path: khipu/*_receipts.parquet
 ---
 
+<p><a href="https://huggingface.co/spaces/SZLHOLDINGS/szl-command-lab"><img src="https://raw.githubusercontent.com/szl-holdings/.github/main/profile/assets/szl/logos/szl_mark_holographic.svg" alt="SZL Holdings" width="112" /></a></p>
+
+# SZL Evidence Lake
+
+Inspect governance receipts alongside doctrine snapshots, publication records and build provenance.
+
+**Artifact:** Governance evidence archive · **Stage:** Verify individual records
+
+[Explore in Command Lab](https://huggingface.co/spaces/SZLHOLDINGS/szl-command-lab) · [Build](https://github.com/szl-holdings/szl-lake) · [Evidence](https://github.com/szl-holdings/szl-lake/blob/8826fdb5fa4de4cdab64c33ec22aacf793d0f564/huggingface/README.md)
+
+## Before you use it
+
+- The default Viewer covers the homogeneous receipt Parquet files; other artifacts retain their own schemas.
+- Empty chains stay empty, and receipt integrity does not establish factual truth, legal compliance or current readiness.
+
+<details>
+<summary>Technical details and original evidence</summary>
+
+The retained source below is exact and may contain historical observations. Its dates, use restrictions, licenses and evidence boundaries continue to apply.
+
+<!-- SZL-PRESERVED-TECHNICAL-BODY:START -->
+
 <div align="center">
 <p>
 
@@ -146,3 +168,7 @@ Honesty (Doctrine v11): Λ unconditional uniqueness is **Conjecture 1** (machine
 
 [a-11-oy.com](https://a-11-oy.com) · [a11oy Space](https://huggingface.co/spaces/SZLHOLDINGS/a11oy) · [killinchu](https://huggingface.co/spaces/SZLHOLDINGS/killinchu) · [all SZLHOLDINGS datasets and models](https://huggingface.co/SZLHOLDINGS) · [GitHub org](https://github.com/szl-holdings)
 
+
+<!-- SZL-PRESERVED-TECHNICAL-BODY:END -->
+
+</details>
