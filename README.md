@@ -2,15 +2,16 @@
 
 # SZL Holdings Data Lake — `szl-lake`
 <!-- szl:header v1 -->
-<!-- badges: add this repo's CI / release / status badges here -->
-[![org: szl-holdings](https://img.shields.io/badge/org-szl--holdings-black)](https://github.com/szl-holdings)
-[![doctrine](https://img.shields.io/badge/doctrine-control%20before%20action%20%C2%B7%20evidence%20after-blue)](https://a-11-oy.com)
+<!-- Native identity: szl-brand@4309f6fce89179331b0b3ed8c99494e76c5be256; Orbit v2 icon. -->
+<p>
+  <a href="https://github.com/szl-holdings">
+    <img src="https://raw.githubusercontent.com/szl-holdings/szl-brand/4309f6fce89179331b0b3ed8c99494e76c5be256/kit/logos/orbit-v2/suite/szl-icon-32.svg" alt="SZL Holdings — Orbit v2" width="32" height="32" />
+  </a>
+</p>
 
 **Control before action. Evidence after.**
 
-Part of the [szl-holdings](https://github.com/szl-holdings) estate ·
-Product: [a-11-oy.com](https://a-11-oy.com) ·
-Proof: [a11oy.net](https://a11oy.net)
+[Product](https://a-11-oy.com) · [Proof](https://a11oy.net) · [GitHub organization](https://github.com/szl-holdings)
 <!-- /szl:header -->
 
 [![HF Dataset](https://img.shields.io/badge/HF%20Dataset-SZLHOLDINGS%2Fszl--lake-FFD21E?style=flat-square&logo=huggingface&logoColor=000)](https://huggingface.co/datasets/SZLHOLDINGS/szl-lake)
