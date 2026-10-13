@@ -112,7 +112,7 @@ and `szl_lake_query.py` returned a stub. This is the real ingest + query path.
 
 | File | Role |
 |---|---|
-| `szl_lake_store.py` | Durable, append-only, hash-chained NDJSON store (`ReceiptLedger`). Restart-safe — all state is rebuilt from disk, never an in-memory map that resets. |
+| `szl_lake_store.py` | Durable, append-only, hash-chained NDJSON store (`ReceiptLedger`). Restart-safe — all state is rebuilt from disk, never an in-memory map that resets, and every record is re-validated (index, prev-hash link, recomputed hash, body identity) before an append is admitted. A corrupted organ chain fails closed: appends are refused with `LedgerCorruptionError` naming the first bad line, and the corrupt bytes are left untouched. Writers sharing one store root serialize on a per-organ OS lock file (`<organ>/.writer.lock`). |
 | `szl_lake_server.py` | FastAPI service exposing the ingest + query API. |
 | `szl_lake_client.py` | Fire-and-forget `emit_receipt(...)` helper for callers. |
 | `szl_lake_query.py` | `query_receipts(...)` now reads the real store (stub path replaced for receipts; `LakeQuery` kept importable for back-compat). |
@@ -136,7 +136,12 @@ uvicorn szl_lake_server:app --host 0.0.0.0 --port 8088
 
 The ingest accepts the live **DSSE receipt shape** a11oy emits:
 `{id, ts, organ, decision, governance:{lambda, gates}, dsse:{payloadType, payload, signatures:[{sig, keyid}]}, energy}`.
-Receipts are partitioned on disk by `khipu/<organ>/<YYYY-MM-DD>.ndjson`.
+Receipts are partitioned on disk by `khipu/<organ>/<YYYY-MM-DD>.ndjson` (the
+receipt's UTC date). A receipt dated before the organ's newest partition is
+appended to that newest partition, with its `ts` unchanged, so stored order
+always equals chain order. If an organ's stored chain fails validation,
+ingest and `chain/head` for that organ answer HTTP 503 `ledger_corrupted`
+(with the file, line and reason) and nothing is written.
 
 ### `SZL_RECEIPT_SINK` wire contract
 

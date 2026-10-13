@@ -33,17 +33,47 @@ Honest labels only: if a receipt carries no measured energy (e.g. NVML/joules
 absent) the envelope stores energy as {"label": "UNAVAILABLE"} — joules are
 NEVER fabricated.
 
+Recovery contract (fail closed). In-memory state is only ever derived from
+on-disk records that passed validation: every persisted line must parse to a
+v1 envelope for this organ, carry the next contiguous ``chain_index``, link
+``prev_hash`` to the previous record's ``chain_hash``, re-derive its own
+``chain_hash``, and bind ``receipt_id`` to its stored body. The first record
+that fails (including an unterminated trailing record left by a torn write)
+puts that organ into a read-only corrupted state: ``append``/``chain_head``
+raise ``LedgerCorruptionError`` naming the file, line and reason, and
+``health`` reports it. Nothing is healed, truncated or deleted — the corrupt
+bytes stay exactly as found for an operator to inspect. ``reload()`` re-runs
+recovery from disk.
+
+Writer contract (multi-process). Each organ has an OS-level exclusive lock
+file, ``<root>/<organ>/.writer.lock`` (``fcntl.flock`` on POSIX,
+``msvcrt.locking`` on Windows). ``append`` holds it across re-reading and
+validating the on-disk head, writing the record and fsync, so independent
+ReceiptLedger instances and separate processes sharing one root serialize
+onto one chain instead of forking it. Stored order always equals chain order:
+a receipt whose ts falls before the organ's newest partition is appended to
+that newest partition (its ts is stored unchanged). The lock is advisory, so
+it only serializes writers that use this module.
+
 stdlib-only. Apache-2.0 — SZL Holdings 2026.
 """
 from __future__ import annotations
 
+import contextlib
+import errno
 import hashlib
 import json
 import os
 import re
 import threading
+import time
 from datetime import datetime, timezone
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
+
+if os.name == "nt":  # pragma: no cover - exercised on Windows hosts
+    import msvcrt
+else:
+    import fcntl
 
 # Khipu locked hash: SHA3-256 (advisory BFT chain — Conjecture 2, not proven).
 CHAIN_HASH = "sha3_256"
@@ -53,6 +83,94 @@ SCHEMA = "szl.lake.receipt/v1"
 _ORGAN_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 
 DEFAULT_ROOT = os.environ.get("SZL_LAKE_DIR", "khipu")
+# Per-organ writer lock file. Not a partition (only *.ndjson files are).
+LOCK_FILENAME = ".writer.lock"
+DEFAULT_LOCK_TIMEOUT = 30.0
+_O_BINARY = getattr(os, "O_BINARY", 0)
+
+
+class LedgerCorruptionError(RuntimeError):
+    """A persisted record failed recovery validation; the organ is read-only.
+
+    ``path``/``line`` locate the first bad line (1-based within its partition
+    file), ``position`` is the chain position it should have held, ``reason``
+    is a stable kind (``unparseable_line``, ``unterminated_record``,
+    ``malformed_envelope``, ``organ_mismatch``, ``index_discontinuity``,
+    ``prev_hash_mismatch``, ``chain_hash_mismatch``, ``malformed_receipt``,
+    ``receipt_id_mismatch``, ``duplicate_receipt_id``). The bytes on disk are
+    left untouched.
+    """
+
+    def __init__(self, organ: str, path: str, line: int, position: int,
+                 reason: str, detail: str, file: str) -> None:
+        self.organ = organ
+        self.path = path
+        self.file = file
+        self.line = line
+        self.position = position
+        self.reason = reason
+        self.detail = detail
+        super().__init__(
+            f"ledger organ {organ!r} is corrupted at {file}:{line} "
+            f"({reason}: {detail}); appends are refused and the on-disk "
+            f"records are left untouched")
+
+    def as_dict(self) -> dict:
+        return {
+            "organ": self.organ,
+            "file": self.file,
+            "line": self.line,
+            "position": self.position,
+            "reason": self.reason,
+            "detail": self.detail,
+        }
+
+
+class LedgerLockTimeout(TimeoutError):
+    """The per-organ writer lock was not acquired within ``lock_timeout``."""
+
+
+def _try_lock(fd: int) -> bool:
+    if os.name == "nt":  # pragma: no cover - exercised on Windows hosts
+        os.lseek(fd, 0, os.SEEK_SET)
+        try:
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        except OSError as exc:
+            if exc.errno in (errno.EACCES, errno.EDEADLK):
+                return False
+            raise
+        return True
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return False
+    return True
+
+
+def _unlock(fd: int) -> None:
+    if os.name == "nt":  # pragma: no cover - exercised on Windows hosts
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    else:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
+def _append_durably(path: str, data: bytes) -> None:
+    """Append ``data`` to ``path`` and fsync before returning."""
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | _O_BINARY,
+                 0o666)
+    try:
+        view = memoryview(data)
+        while view:
+            view = view[os.write(fd, view):]
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _short(value: Any, limit: int = 80) -> str:
+    text = repr(value)
+    return text if len(text) <= limit else text[:limit - 3] + "..."
 
 
 def _now_iso() -> str:
@@ -72,6 +190,18 @@ def _sha3_256(b: bytes) -> str:
 def canonical_hash(obj: Any) -> str:
     """SHA3-256 over canonical JSON of obj."""
     return _sha3_256(canonical_json(obj))
+
+
+def _link_hash(prev_hash: Any, receipt_id: Any, organ: Any, ts: Any,
+               chain_index: Any) -> str:
+    """The Khipu link hash documented in the module docstring."""
+    return canonical_hash({
+        "prev_hash": prev_hash,
+        "receipt_id": receipt_id,
+        "organ": organ,
+        "ts": ts,
+        "chain_index": chain_index,
+    })
 
 
 def normalize_organ(organ: Any) -> str:
@@ -148,27 +278,40 @@ def _partition_date(ts: str) -> str:
 
 
 class _OrganState:
-    """In-memory mirror of one organ's on-disk chain (rebuilt from disk)."""
+    """In-memory mirror of one organ's VALIDATED on-disk chain."""
 
-    __slots__ = ("seen", "chain_index", "chain_head", "count")
+    __slots__ = ("seen", "chain_index", "chain_head", "count", "files",
+                 "tail", "corruption")
 
     def __init__(self) -> None:
         self.seen: set[str] = set()
         self.chain_index: int = 0
         self.chain_head: str | None = None
         self.count: int = 0
+        # partition basename -> [validated byte offset, validated line count],
+        # in stored (sorted) order.
+        self.files: dict[str, list[int]] = {}
+        # (basename, byte offset, raw bytes) of the head record, re-read under
+        # the writer lock before the cached state is trusted again.
+        self.tail: tuple[str, int, bytes] | None = None
+        self.corruption: LedgerCorruptionError | None = None
 
 
 class ReceiptLedger:
     """Durable, append-only, hash-chained receipt ledger.
 
-    Thread-safe. Survives process restarts because all state is reconstructed
-    from the on-disk NDJSON partitions — there is no authoritative in-memory
-    map that could reset.
+    Thread-safe within a process and serialized across processes by a
+    per-organ OS lock file. Survives process restarts because all state is
+    reconstructed from the on-disk NDJSON partitions — there is no
+    authoritative in-memory map that could reset — and that reconstruction
+    validates every record and fails closed on the first bad one (see the
+    module docstring).
     """
 
-    def __init__(self, root: str | None = None) -> None:
+    def __init__(self, root: str | None = None, *,
+                 lock_timeout: float = DEFAULT_LOCK_TIMEOUT) -> None:
         self.root = os.path.abspath(root or DEFAULT_ROOT)
+        self.lock_timeout = float(lock_timeout)
         self._lock = threading.RLock()
         self._states: dict[str, _OrganState] = {}
 
@@ -197,45 +340,230 @@ class ReceiptLedger:
             and _ORGAN_RE.match(name)
         )
 
-    # ---- state rebuild --------------------------------------------------
-    def _rebuild_state(self, organ: str) -> _OrganState:
-        """Reconstruct an organ's chain state by replaying its partitions."""
-        st = _OrganState()
-        for path in self._iter_partition_files(organ):
-            with open(path, "r", encoding="utf-8") as fh:
-                for line in fh:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        env = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    rid = env.get("receipt_id")
-                    if rid:
-                        st.seen.add(rid)
-                    ci = env.get("chain_index")
-                    if isinstance(ci, int) and ci > st.chain_index:
-                        st.chain_index = ci
-                    ch = env.get("chain_hash")
-                    if ch:
-                        st.chain_head = ch
-                    st.count += 1
+    # ---- cross-process writer lock --------------------------------------
+    @contextlib.contextmanager
+    def _organ_lock(self, organ: str, *, write: bool) -> Iterator[str]:
+        """Hold the organ's exclusive OS lock.
+
+        Yields ``"held"``; for readers it may instead yield ``"absent"`` (the
+        organ directory does not exist, so there is nothing on disk to read)
+        or ``"unlockable"`` (the lock file cannot be opened, e.g. a read-only
+        root that no writer of this module ever wrote). Writers create the
+        organ directory and lock file; readers never create the directory.
+        """
+        d = self._organ_dir(organ)
+        path = os.path.join(d, LOCK_FILENAME)
+        fd: int | None = None
+        if write:
+            os.makedirs(d, exist_ok=True)
+            fd = os.open(path, os.O_RDWR | os.O_CREAT | _O_BINARY, 0o666)
+        elif not os.path.isdir(d):
+            yield "absent"
+            return
+        else:
+            for flags in (os.O_RDWR | os.O_CREAT, os.O_RDONLY):
+                try:
+                    fd = os.open(path, flags | _O_BINARY, 0o666)
+                    break
+                except OSError:
+                    continue
+        if fd is None:
+            yield "unlockable"
+            return
+        try:
+            deadline = time.monotonic() + self.lock_timeout
+            delay = 0.001
+            while not _try_lock(fd):
+                if time.monotonic() >= deadline:
+                    raise LedgerLockTimeout(
+                        f"writer lock for organ {organ!r} not acquired within "
+                        f"{self.lock_timeout:g}s ({path})")
+                time.sleep(delay)
+                delay = min(delay * 2, 0.05)
+            try:
+                yield "held"
+            finally:
+                _unlock(fd)
+        finally:
+            os.close(fd)
+
+    # ---- state recovery (validating replay) -----------------------------
+    def _cache_is_current_prefix(self, organ: str, st: _OrganState,
+                                 listing: list[tuple[str, str, int]]) -> bool:
+        """True when disk is a pure append-extension of what st validated.
+
+        Earlier partitions must be unchanged in size, the last validated
+        partition may only have grown, and the validated head record must
+        still be byte-identical on disk. Anything else forces a full replay.
+        """
+        cached = list(st.files.items())
+        if len(listing) < len(cached):
+            return False
+        for i, (name, (offset, _)) in enumerate(cached):
+            disk_name, _, disk_size = listing[i]
+            if disk_name != name:
+                return False
+            if disk_size < offset or (i < len(cached) - 1
+                                      and disk_size != offset):
+                return False
+        if st.tail is not None:
+            name, start, raw = st.tail
+            with open(os.path.join(self._organ_dir(organ), name), "rb") as fh:
+                fh.seek(start)
+                if fh.read(len(raw)) != raw:
+                    return False
+        return True
+
+    def _admit(self, st: _OrganState, organ: str,
+               body: bytes) -> tuple[str, str] | None:
+        """Validate one persisted record against st; admit it or say why not."""
+        try:
+            env = json.loads(body.decode("utf-8"))
+        except (ValueError, RecursionError) as exc:
+            return "unparseable_line", _short(str(exc), 120)
+        if not isinstance(env, dict):
+            return "unparseable_line", "record is not a JSON object"
+
+        if env.get("schema") != SCHEMA:
+            return "malformed_envelope", (
+                f"schema must be {SCHEMA!r}, stored {_short(env.get('schema'))}")
+        if env.get("chain_alg") != CHAIN_HASH:
+            return "malformed_envelope", (
+                f"chain_alg must be {CHAIN_HASH!r}, stored "
+                f"{_short(env.get('chain_alg'))}")
+        if env.get("organ") != organ:
+            return "organ_mismatch", (
+                f"record organ {_short(env.get('organ'))} stored under "
+                f"{organ!r}")
+        rid = env.get("receipt_id")
+        ts = env.get("ts")
+        ci = env.get("chain_index")
+        prev = env.get("prev_hash")
+        stored_hash = env.get("chain_hash")
+        if not isinstance(rid, str) or not rid:
+            return "malformed_envelope", "receipt_id must be a non-empty string"
+        if not isinstance(ts, str):
+            return "malformed_envelope", "ts must be a string"
+        if type(ci) is not int:
+            return "malformed_envelope", (
+                f"chain_index must be an integer, stored {_short(ci)}")
+        if prev is not None and not isinstance(prev, str):
+            return "malformed_envelope", "prev_hash must be a string or null"
+        if not isinstance(stored_hash, str):
+            return "malformed_envelope", "chain_hash must be a string"
+
+        expected = st.chain_index + 1
+        if ci != expected:
+            return "index_discontinuity", f"expected {expected}, stored {ci}"
+        if prev != st.chain_head:
+            return "prev_hash_mismatch", (
+                f"expected {_short(st.chain_head)}, stored {_short(prev)}")
+        if _link_hash(prev, rid, organ, ts, ci) != stored_hash:
+            return "chain_hash_mismatch", "recomputed link hash != stored"
+        receipt = env.get("receipt")
+        if not isinstance(receipt, dict):
+            return "malformed_receipt", (
+                "stored receipt body must be a JSON object")
+        try:
+            body_id = receipt_identity(receipt)
+        except Exception:  # noqa: BLE001
+            body_id = None
+        if body_id != rid:
+            return "receipt_id_mismatch", (
+                "stored receipt body no longer hashes to receipt_id")
+        if rid in st.seen:
+            return "duplicate_receipt_id", (
+                f"receipt_id {_short(rid)} already appears earlier in the chain")
+
+        st.seen.add(rid)
+        st.chain_index = ci
+        st.chain_head = stored_hash
+        st.count += 1
+        return None
+
+    def _replay(self, organ: str, st: _OrganState,
+                listing: list[tuple[str, str, int]]) -> None:
+        """Validate every not-yet-validated byte of every partition, in order.
+
+        Stops at the first bad record and records it on ``st.corruption``.
+        """
+        for name, path, _ in listing:
+            pos, lineno = st.files.get(name, (0, 0))
+            with open(path, "rb") as fh:
+                fh.seek(pos)
+                for raw in iter(fh.readline, b""):
+                    if not raw.endswith(b"\n"):
+                        if raw.strip():
+                            st.files[name] = [pos, lineno]
+                            self._mark_corrupt(
+                                st, organ, path, lineno + 1,
+                                "unterminated_record",
+                                f"{len(raw)} trailing byte(s) with no newline "
+                                f"(torn or partial write)")
+                            return
+                        pos += len(raw)  # trailing whitespace: not a record
+                        break
+                    body = raw.strip()
+                    if body:
+                        problem = self._admit(st, organ, body)
+                        if problem is not None:
+                            st.files[name] = [pos, lineno]
+                            self._mark_corrupt(st, organ, path, lineno + 1,
+                                               *problem)
+                            return
+                        st.tail = (name, pos, raw)
+                    pos += len(raw)
+                    lineno += 1
+            st.files[name] = [pos, lineno]
+
+    def _mark_corrupt(self, st: _OrganState, organ: str, path: str, line: int,
+                      reason: str, detail: str) -> None:
+        rel = os.path.relpath(path, self.root).replace(os.sep, "/")
+        st.corruption = LedgerCorruptionError(
+            organ=organ, path=path, line=line, position=st.chain_index + 1,
+            reason=reason, detail=detail, file=rel)
+
+    def _refresh_locked(self, organ: str) -> _OrganState:
+        """Bring the organ's state up to date with disk (lock already held).
+
+        Validates only what this instance has not yet validated (e.g. records
+        another writer appended); falls back to a full validating replay when
+        disk is not a pure extension of the cached view. A recorded
+        corruption is sticky until ``reload()``.
+        """
+        st = self._states.get(organ)
+        if st is not None and st.corruption is not None:
+            return st
+        listing = [(os.path.basename(p), p, os.path.getsize(p))
+                   for p in self._iter_partition_files(organ)]
+        if st is None or not self._cache_is_current_prefix(organ, st, listing):
+            st = _OrganState()
+        self._replay(organ, st, listing)
+        self._states[organ] = st
         return st
 
     def _state(self, organ: str) -> _OrganState:
-        st = self._states.get(organ)
-        if st is None:
-            st = self._rebuild_state(organ)
-            self._states[organ] = st
-        return st
+        with self._lock, self._organ_lock(organ, write=False) as lock:
+            if lock == "absent":
+                # Nothing on disk. Do not scan: a writer may be creating the
+                # directory right now, outside any lock this reader holds.
+                self._states.pop(organ, None)
+                return _OrganState()
+            return self._refresh_locked(organ)
+
+    @staticmethod
+    def _raise_if_corrupt(st: _OrganState) -> None:
+        if st.corruption is not None:
+            raise st.corruption.with_traceback(None)
 
     # ---- write ----------------------------------------------------------
     def append(self, receipt: dict) -> dict:
         """Append a single receipt. Idempotent on its id/hash.
 
         Returns {accepted, duplicate, receipt_id, ledger_offset, chain_index,
-        chain_head, organ}.
+        chain_head, organ}. Raises LedgerCorruptionError (nothing written)
+        when the organ's persisted chain fails validation, and
+        LedgerLockTimeout when the writer lock is not acquired in time.
         """
         if not isinstance(receipt, dict):
             raise ValueError("receipt must be a JSON object")
@@ -243,8 +571,11 @@ class ReceiptLedger:
         rid = receipt_identity(receipt)
         ts = _receipt_ts(receipt)
 
-        with self._lock:
-            st = self._state(organ)
+        with self._lock, self._organ_lock(organ, write=True):
+            # Re-read and validate the on-disk head under the writer lock, so
+            # the record below always extends the chain that is on disk now.
+            st = self._refresh_locked(organ)
+            self._raise_if_corrupt(st)
 
             if rid in st.seen:
                 return {
@@ -259,13 +590,7 @@ class ReceiptLedger:
 
             chain_index = st.chain_index + 1
             prev_hash = st.chain_head
-            chain_hash = canonical_hash({
-                "prev_hash": prev_hash,
-                "receipt_id": rid,
-                "organ": organ,
-                "ts": ts,
-                "chain_index": chain_index,
-            })
+            chain_hash = _link_hash(prev_hash, rid, organ, ts, chain_index)
 
             envelope = {
                 "schema": SCHEMA,
@@ -281,26 +606,27 @@ class ReceiptLedger:
                 "receipt": receipt,
             }
 
-            date = _partition_date(ts)
-            path = self._partition_path(organ, date)
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "a", encoding="utf-8") as fh:
-                fh.write(json.dumps(envelope, sort_keys=True,
-                                    separators=(",", ":")) + "\n")
-                fh.flush()
-                os.fsync(fh.fileno())
-
-            st.seen.add(rid)
-            st.chain_index = chain_index
-            st.chain_head = chain_hash
-            st.count += 1
+            # Never write behind the newest partition: stored order must stay
+            # equal to chain order for recovery and verify_chain to replay it.
+            name = os.path.basename(
+                self._partition_path(organ, _partition_date(ts)))
+            newest = next(reversed(st.files), None)
+            if newest is not None and newest > name:
+                name = newest
+            line = json.dumps(envelope, sort_keys=True,
+                              separators=(",", ":")) + "\n"
+            _append_durably(os.path.join(self._organ_dir(organ), name),
+                            line.encode("utf-8"))
+            # st is not advanced here: the next refresh validates this record
+            # from disk like any other writer's, so state never runs ahead of
+            # what is durably on disk.
 
             return {
                 "accepted": True,
                 "duplicate": False,
                 "receipt_id": rid,
                 "organ": organ,
-                "ledger_offset": st.count,
+                "ledger_offset": st.count + 1,
                 "chain_index": chain_index,
                 "chain_head": chain_hash,
             }
@@ -361,10 +687,15 @@ class ReceiptLedger:
         return out
 
     def chain_head(self, organ: str) -> dict:
-        """Current hash-chain head + count for one organ."""
+        """Current validated hash-chain head + count for one organ.
+
+        Re-read from disk under the writer lock, so it reflects every writer
+        sharing this root. Raises LedgerCorruptionError for a corrupted organ.
+        """
         org = normalize_organ(organ)
         with self._lock:
             st = self._state(org)
+            self._raise_if_corrupt(st)
             return {
                 "organ": org,
                 "chain_alg": CHAIN_HASH,
@@ -403,7 +734,9 @@ class ReceiptLedger:
         receipt IS bound in full by check (4).
 
         Reads authoritative on-disk state directly (never the in-memory cache),
-        so it catches tampering done to the files behind a running process.
+        so it catches tampering done to the files behind a running process. It
+        holds the organ's writer lock while reading, so it sees a consistent
+        snapshot even while other processes append.
 
         Returns ``{organ, chain_alg, ok, count, chain_head, chain_index,
         broken:[{position, kind, detail}, ...]}``. ``ok`` is True iff
@@ -416,7 +749,7 @@ class ReceiptLedger:
         last_hash: str | None = None
         last_index = 0
 
-        with self._lock:
+        with self._lock, self._organ_lock(org, write=False):
             for path in self._iter_partition_files(org):
                 with open(path, "r", encoding="utf-8") as fh:
                     for lineno, raw in enumerate(fh, 1):
@@ -459,13 +792,9 @@ class ReceiptLedger:
                             })
 
                         stored_hash = env.get("chain_hash")
-                        recomputed = canonical_hash({
-                            "prev_hash": stored_prev,
-                            "receipt_id": env.get("receipt_id"),
-                            "organ": env.get("organ"),
-                            "ts": env.get("ts"),
-                            "chain_index": ci,
-                        })
+                        recomputed = _link_hash(
+                            stored_prev, env.get("receipt_id"),
+                            env.get("organ"), env.get("ts"), ci)
                         if recomputed != stored_hash:
                             broken.append({
                                 "position": pos,
@@ -509,29 +838,45 @@ class ReceiptLedger:
         }
 
     def health(self) -> dict:
-        """Store reachability, total receipts, and per-organ counts."""
+        """Store reachability, total receipts, and per-organ counts.
+
+        Counts cover validated records only. A corrupted organ is reported
+        (``ok`` False, its name in ``corrupted_organs``, and a ``corruption``
+        entry naming the first bad line) instead of raising; its count is the
+        validated prefix before that line.
+        """
         with self._lock:
             per_organ = {}
             total = 0
+            corrupted = []
             for org in self._list_organs():
                 st = self._state(org)
-                per_organ[org] = {
+                entry = {
                     "count": st.count,
                     "chain_index": st.chain_index,
                     "chain_head": st.chain_head,
                 }
+                if st.corruption is not None:
+                    entry["corruption"] = st.corruption.as_dict()
+                    corrupted.append(org)
+                per_organ[org] = entry
                 total += st.count
-            return {
-                "ok": os.path.isdir(self.root) or not per_organ,
+            out = {
+                "ok": (os.path.isdir(self.root) or not per_organ)
+                and not corrupted,
                 "store": self.root,
                 "chain_alg": CHAIN_HASH,
                 "schema": SCHEMA,
                 "total_receipts": total,
                 "organs": per_organ,
             }
+            if corrupted:
+                out["corrupted_organs"] = corrupted
+            return out
 
     def reload(self) -> None:
-        """Drop cached state so the next read replays from disk."""
+        """Drop cached state (including a recorded corruption) so the next
+        access re-runs the validating replay from disk."""
         with self._lock:
             self._states.clear()
 

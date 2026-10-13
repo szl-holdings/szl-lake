@@ -12,6 +12,10 @@ Endpoints (all under /api/lake/v1):
   GET  /chain/head      per-organ Khipu chain head + count: ?organ=
   GET  /health          store reachable, total + per-organ counts
 
+A corrupted organ chain fails closed: ingest and chain-head calls for it answer
+HTTP 503 {"error": "ledger_corrupted", "corruption": {file, line, reason, ...}}
+and nothing is written; a writer-lock timeout answers 503 too.
+
 Run locally:
   uvicorn szl_lake_server:app --host 0.0.0.0 --port 8088
 Store location is $SZL_LAKE_DIR (default ./khipu).
@@ -26,7 +30,12 @@ import json
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 
-from szl_lake_store import ReceiptLedger, get_default_ledger
+from szl_lake_store import (
+    LedgerCorruptionError,
+    LedgerLockTimeout,
+    ReceiptLedger,
+    get_default_ledger,
+)
 
 API_PREFIX = "/api/lake/v1"
 
@@ -45,6 +54,15 @@ def _ledger(request: Request) -> ReceiptLedger:
     """Allow tests to inject a ledger via app.state.ledger; else use default."""
     led = getattr(request.app.state, "ledger", None)
     return led if led is not None else get_default_ledger()
+
+
+def _unavailable(exc: Exception) -> JSONResponse:
+    """503 for a ledger that refuses work (corrupted chain or lock timeout)."""
+    if isinstance(exc, LedgerCorruptionError):
+        content = {"error": "ledger_corrupted", "corruption": exc.as_dict()}
+    else:
+        content = {"error": "ledger_lock_timeout", "detail": str(exc)}
+    return JSONResponse(status_code=503, content=content)
 
 
 def _parse_body(raw: bytes, content_type: str) -> list[dict]:
@@ -108,6 +126,8 @@ async def post_receipts(request: Request):
             return JSONResponse(status_code=status, content=result)
         batch = led.append_batch(receipts)
         return JSONResponse(status_code=200, content=batch)
+    except (LedgerCorruptionError, LedgerLockTimeout) as e:
+        return _unavailable(e)
     except ValueError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
@@ -141,6 +161,8 @@ async def get_chain_head(
     led = _ledger(request)
     try:
         return led.chain_head(organ)
+    except (LedgerCorruptionError, LedgerLockTimeout) as e:
+        return _unavailable(e)
     except ValueError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
@@ -161,6 +183,8 @@ async def get_chain_verify(
     led = _ledger(request)
     try:
         return led.verify_chain(organ)
+    except LedgerLockTimeout as e:
+        return _unavailable(e)
     except ValueError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
@@ -168,7 +192,10 @@ async def get_chain_verify(
 @app.get(API_PREFIX + "/health")
 async def get_health(request: Request):
     led = _ledger(request)
-    return led.health()
+    try:
+        return led.health()
+    except LedgerLockTimeout as e:
+        return _unavailable(e)
 
 
 if __name__ == "__main__":
