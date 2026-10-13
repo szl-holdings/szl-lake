@@ -142,6 +142,8 @@ async def get_receipts(
     led = _ledger(request)
     try:
         results = led.query(organ=organ, since=since, limit=limit)
+    except (LedgerCorruptionError, LedgerLockTimeout) as e:
+        return _unavailable(e)
     except ValueError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
     return {

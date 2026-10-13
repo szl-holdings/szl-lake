@@ -129,7 +129,7 @@ uvicorn szl_lake_server:app --host 0.0.0.0 --port 8088
 | Method · Path | Purpose |
 |---|---|
 | `POST /api/lake/v1/receipts` | Ingest one receipt (JSON object), a JSON array, or an **NDJSON batch** (`Content-Type: application/x-ndjson`). Idempotent on receipt `id`/`hash`. Returns `{accepted, ledger_offset, chain_head, chain_index, receipt_id}` (batch returns per-receipt results). |
-| `GET /api/lake/v1/receipts?organ=&since=&limit=` | Real query over the store, newest-first. `since` is an ISO timestamp. |
+| `GET /api/lake/v1/receipts?organ=&since=&limit=` | Real query over the store, newest-first. `since` is an ISO timestamp. Returns only each organ's validated chain; a corrupted organ answers **503** `ledger_corrupted` instead of silently skipping bad records. |
 | `GET /api/lake/v1/chain/head?organ=` | Current Khipu chain head + count for an organ (for cross-component verification). |
 | `GET /api/lake/v1/chain/verify?organ=` | Re-derive an organ's Khipu chain straight from disk and report tamper-evidence: `{ok, count, chain_head, chain_index, broken:[…]}`. Detects on-disk mutation of a committed field, truncation, insertion, and re-ordering. Returns HTTP 200 even when `ok` is `false` (a detected break is a valid result, not a request error). |
 | `GET /api/lake/v1/health` | Store reachable, total receipts, per-organ counts. |
