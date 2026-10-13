@@ -535,5 +535,40 @@ def test_get_chain_verify_invalid_organ_400(client):
     assert resp.status_code == 400
 
 
+# ------------------------------------------ fail-closed recovery (server) ---
+
+def test_corrupted_organ_refuses_ingest_with_503(client):
+    c, led = client
+    c.post("/api/lake/v1/receipts", json=make_receipt("fc1", organ="szl-mesh"))
+    c.post("/api/lake/v1/receipts", json=make_receipt("fc2", organ="szl-mesh"))
+    envs = _read_envelopes(led.root, "szl-mesh")
+    envs[1]["chain_index"] = 41  # tampered link metadata on the head
+    _rewrite_envelopes(led.root, "szl-mesh", envs)
+    path = _partition_files(led.root, "szl-mesh")[0]
+    with open(path, "rb") as fh:
+        before = fh.read()
+    led.reload()  # simulate a restart over the tampered partition
+
+    resp = c.post("/api/lake/v1/receipts", json=make_receipt("fc3",
+                                                             organ="szl-mesh"))
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body["error"] == "ledger_corrupted"
+    assert body["corruption"]["line"] == 2
+    assert body["corruption"]["reason"] == "index_discontinuity"
+    head = c.get("/api/lake/v1/chain/head", params={"organ": "szl-mesh"})
+    assert head.status_code == 503
+    health = c.get("/api/lake/v1/health").json()
+    assert health["ok"] is False
+    assert health["corrupted_organs"] == ["szl-mesh"]
+    with open(path, "rb") as fh:
+        assert fh.read() == before  # corrupt evidence left byte-identical
+    # other organs keep working
+    ok = c.post("/api/lake/v1/receipts", json=make_receipt("fc4",
+                                                           organ="ouroboros"))
+    assert ok.status_code == 200
+    assert ok.json()["accepted"] is True
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([os.path.abspath(__file__), "-q"]))
