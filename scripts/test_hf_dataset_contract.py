@@ -76,6 +76,30 @@ class HuggingFaceDatasetContractTest(unittest.TestCase):
         self.assertEqual(self.metadata.get("size_categories"), [_size_category(rows)])
         self.assertNotEqual(self.metadata.get("size_categories"), ["100M<n<1B"])
 
+    def test_viewer_streaming_batches_preserve_empty_receipt_chains(self) -> None:
+        # The Datasets Parquet reader otherwise infers its batch size from the
+        # first row group, which is zero for a retained empty chain. Arrow's
+        # whole-dataset to_table() path above does not exercise that failure.
+        batch_size = self.receipts.get("batch_size")
+        self.assertIs(type(batch_size), int)
+        self.assertGreater(batch_size, 0)
+        self.assertLessEqual(batch_size, 65_536)
+        observed = {}
+        for path in self.parquet_files:
+            with path.open("rb") as stream:
+                fragment = ds.ParquetFileFormat().make_fragment(stream)
+                batches = fragment.to_batches(
+                    batch_size=batch_size,
+                    batch_readahead=0,
+                    fragment_readahead=0,
+                )
+                observed[path.name] = sum(batch.num_rows for batch in batches)
+        expected = {
+            path.name: pq.ParquetFile(path).metadata.num_rows
+            for path in self.parquet_files
+        }
+        self.assertEqual(observed, expected)
+
     def test_empty_chain_manifest_covers_exact_zero_row_placeholders(self) -> None:
         manifest = json.loads(EMPTY_MANIFEST.read_text(encoding="utf-8"))
         artifacts = manifest["artifacts"]

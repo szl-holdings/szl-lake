@@ -21,6 +21,8 @@ task_categories:
 configs:
   - config_name: receipts
     default: true
+    # Empty fixed-schema chains remain included; never infer a zero batch size.
+    batch_size: 1000
     data_files:
       - split: train
         path: khipu/*_receipts.parquet
