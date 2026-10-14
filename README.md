@@ -131,7 +131,7 @@ uvicorn szl_lake_server:app --host 0.0.0.0 --port 8088
 | `POST /api/lake/v1/receipts` | Ingest one receipt (JSON object), a JSON array, or an **NDJSON batch** (`Content-Type: application/x-ndjson`). Idempotent on receipt `id`/`hash`. Returns `{accepted, ledger_offset, chain_head, chain_index, receipt_id}` (batch returns per-receipt results). |
 | `GET /api/lake/v1/receipts?organ=&since=&limit=` | Real query over the store, newest-first. `since` is an ISO timestamp. Returns only each organ's validated chain; a corrupted organ answers **503** `ledger_corrupted` instead of silently skipping bad records. |
 | `GET /api/lake/v1/chain/head?organ=` | Current Khipu chain head + count for an organ (for cross-component verification). |
-| `GET /api/lake/v1/chain/verify?organ=` | Re-derive an organ's Khipu chain straight from disk and report tamper-evidence: `{ok, count, chain_head, chain_index, broken:[…]}`. Detects on-disk mutation of a committed field, truncation, insertion, and re-ordering. Returns HTTP 200 even when `ok` is `false` (a detected break is a valid result, not a request error). |
+| `GET /api/lake/v1/chain/verify?organ=` | Re-derive an organ's Khipu chain straight from disk and report tamper-evidence: `{ok, count, chain_head, chain_index, broken:[…]}`. Detects invalid committed fields, broken links/indices, insertion, and re-ordering. A self-consistent shortened or rehashed chain needs a trusted prior head to establish historical rollback. Returns HTTP 200 even when `ok` is `false` (a detected break is a valid result, not a request error). |
 | `GET /api/lake/v1/health` | Store reachable, total receipts, per-organ counts. |
 
 The ingest accepts the live **DSSE receipt shape** a11oy emits:
@@ -142,6 +142,40 @@ appended to that newest partition, with its `ts` unchanged, so stored order
 always equals chain order. If an organ's stored chain fails validation,
 ingest and `chain/head` for that organ answer HTTP 503 `ledger_corrupted`
 (with the file, line and reason) and nothing is written.
+
+Each refresh fully replays the organ's ledger and must reach this live
+instance's previously observed index with the same hash. Equal-size edits to
+an earlier record cannot hide behind cached head bytes. Losing a previously
+observed tail (`observed_tail_missing`) or replacing its history
+(`observed_head_mismatch`) makes the organ read-only until explicit
+`reload()`, with the prior index/hash retained in the diagnostic. Replay costs
+O(total organ ledger bytes) per refresh/append. Legitimate extensions by
+another writer remain accepted under the existing writer lock.
+
+Each successful append records its returned head immediately after fsync,
+before releasing either lock. This includes the last successful item of a
+batch even if a later item fails; batches remain per-item, not all-or-nothing.
+Write/fsync failures do not acknowledge the attempted head, but bytes may
+already have reached disk and the next replay must validate them.
+
+This is an in-memory observation, not durable anti-rollback.
+Restart and `reload()` forget prior observations;
+independent `verify_chain()` can report `ok=true` for a self-consistent
+shortened or rewritten chain even while this warmed instance refuses it.
+Signature validation and non-identity fields of id-bearing receipt bodies
+remain outside this chain check. Direct reads of a remembered removed organ
+preserve its observation/corruption; `health()` still lists only directories
+currently on disk. HTTP event-loop lock responsiveness is unchanged.
+
+Recovery and query regression checks (temporary stores only):
+
+```bash
+python -m pytest -q tests scripts/test_lake_ledger.py scripts/test_lake_receipt_spine.py
+```
+
+The HTTP tests require FastAPI/TestClient; the optional receipt-spine suite
+skips when `szl_receipt` is absent. A successful run of `tests/` alone does not
+establish that the `scripts/` suites ran.
 
 ### `SZL_RECEIPT_SINK` wire contract
 
