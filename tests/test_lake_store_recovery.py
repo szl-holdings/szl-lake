@@ -398,3 +398,358 @@ def test_lock_wait_is_bounded_and_typed(tmp_path):
         with pytest.raises(LedgerLockTimeout):
             waiter.append(receipt(2))
     assert waiter.append(receipt(2))["chain_index"] == 2
+
+# -------------------------------------- live-instance observed history ------
+
+@pytest.mark.parametrize("verify_first", [False, True])
+def test_cached_history_equal_size_non_head_edit_refuses(tmp_path, verify_first):
+    root, path, led = seeded(tmp_path, n=2)
+    led.chain_head(ORGAN)  # explicitly warm the cached-history regression
+    original = read_lines(path)
+    changed = edit(0, _set(ts=f"{DAY}T00:00:01Z"))(original.copy())
+    path.write_bytes(b"".join(changed))
+    assert path.stat().st_size == len(b"".join(original))
+    assert read_lines(path)[-1] == original[-1]
+    before = snapshot(root)
+
+    if verify_first:
+        assert led.verify_chain(ORGAN)["ok"] is False
+    with pytest.raises(LedgerCorruptionError) as caught:
+        led.append(receipt(3))
+    assert (caught.value.reason, caught.value.position, caught.value.line) == (
+        "chain_hash_mismatch", 1, 1)
+    assert snapshot(root) == before
+    assert led.verify_chain(ORGAN)["ok"] is False
+    for action in (lambda: led.append(receipt(4)),
+                   lambda: led.chain_head(ORGAN),
+                   lambda: led.query(organ=ORGAN)):
+        with pytest.raises(LedgerCorruptionError):
+            action()
+    assert snapshot(root) == before
+
+
+@pytest.mark.parametrize("removal", ["last_line", "newest_partition"])
+@pytest.mark.parametrize("refresh", ["append", "head", "health", "query"])
+def test_observed_tail_removal_refuses(tmp_path, removal, refresh):
+    root, path, led = seeded(tmp_path, n=1)
+    latest_ts = (f"{DAY}T00:00:01Z" if removal == "last_line"
+                 else "2026-10-01T00:00:00Z")
+    led.append(receipt(2, ts=latest_ts))
+    observed = led.chain_head(ORGAN)
+    assert observed["chain_index"] == 2
+    if removal == "last_line":
+        path.write_bytes(read_lines(path)[0])
+        expected_path, expected_line = path, 2
+    else:
+        expected_path = Path(root) / ORGAN / "2026-10-01.ndjson"
+        expected_path.unlink()
+        expected_line = 1
+    before = snapshot(root)
+    # Independent structural verification cannot know the lost observation.
+    assert led.verify_chain(ORGAN)["ok"] is True
+
+    if refresh == "health":
+        assert led.health()["ok"] is False
+    elif refresh != "append":
+        with pytest.raises(LedgerCorruptionError):
+            (led.chain_head(ORGAN) if refresh == "head"
+             else led.query(organ=ORGAN))
+    with pytest.raises(LedgerCorruptionError) as caught:
+        led.append(receipt(3, ts="2026-10-02T00:00:00Z"))
+    error = caught.value
+    assert error.reason == "observed_tail_missing"
+    assert (error.position, error.line, Path(error.path)) == (
+        2, expected_line, expected_path)
+    assert observed["chain_head"] in error.detail
+    assert "2" in error.detail
+    assert snapshot(root) == before
+    assert led.verify_chain(ORGAN)["ok"] is True
+    with pytest.raises(LedgerCorruptionError):
+        led.append(receipt(4))
+    assert snapshot(root) == before
+
+
+@pytest.mark.parametrize("extra_records", [0, 1])
+def test_observed_checkpoint_rejects_self_consistent_rewrite(tmp_path, extra_records):
+    root, path, led = seeded(tmp_path, n=2)
+    observed = led.chain_head(ORGAN)
+    if extra_records:
+        ReceiptLedger(root).append(receipt(3))
+    envs = [json.loads(line) for line in read_lines(path)]
+    envs[0]["ts"] = f"{DAY}T00:00:01Z"
+    previous_hash = None
+    for env in envs:
+        env["prev_hash"] = previous_hash
+        env["chain_hash"] = link_hash(env)
+        previous_hash = env["chain_hash"]
+    path.write_bytes(b"".join(map(dump, envs)))
+    before = snapshot(root)
+    assert ReceiptLedger(root).verify_chain(ORGAN)["ok"] is True
+    with pytest.raises(LedgerCorruptionError) as caught:
+        led.append(receipt(4))
+    assert caught.value.reason == "observed_head_mismatch"
+    assert (caught.value.position, caught.value.line) == (2, 2)
+    assert observed["chain_head"] in caught.value.detail
+    assert envs[1]["chain_hash"] in caught.value.detail
+    for _ in range(2):
+        with pytest.raises(LedgerCorruptionError):
+            led.chain_head(ORGAN)
+        assert led.health()["ok"] is False
+        assert led.verify_chain(ORGAN)["ok"] is True
+        with pytest.raises(LedgerCorruptionError):
+            led.append(receipt(5))
+    assert snapshot(root) == before
+
+
+@pytest.mark.parametrize("new_partition", [False, True])
+def test_observed_checkpoint_allows_legitimate_extension(tmp_path, new_partition):
+    root, _, led = seeded(tmp_path, n=2)
+    observed = led.chain_head(ORGAN)
+    ts = "2026-10-01T00:00:00Z" if new_partition else f"{DAY}T00:00:01Z"
+    other = ReceiptLedger(root)
+    extension = other.append(receipt(3, ts=ts))
+    continued = led.append(receipt(4, ts=ts))
+    assert extension["chain_index"] == extension["ledger_offset"] == 3
+    assert continued["chain_index"] == continued["ledger_offset"] == 4
+    assert led.chain_head(ORGAN)["chain_head"] == continued["chain_head"]
+    assert led.append(receipt(3))["duplicate"] is True
+    assert led.verify_chain(ORGAN)["ok"] is True
+    stored = {env["chain_index"]: env for env in led.query(ORGAN)}
+    assert stored[3]["prev_hash"] == observed["chain_head"]
+    assert stored[4]["prev_hash"] == extension["chain_head"]
+
+
+def test_observed_missing_directory_refuses_without_creating_on_read(tmp_path):
+    import shutil
+
+    root, path, led = seeded(tmp_path, n=2)
+    observed = led.chain_head(ORGAN)
+    shutil.rmtree(path.parent)
+    with pytest.raises(LedgerCorruptionError) as caught:
+        led.chain_head(ORGAN)
+    assert caught.value.reason == "observed_tail_missing"
+    assert (caught.value.position, caught.value.line) == (1, 1)
+    assert observed["chain_head"] in caught.value.detail
+    assert not path.parent.exists()
+    with pytest.raises(LedgerCorruptionError):
+        led.append(receipt(3))
+    assert snapshot(root) == {}
+
+
+def test_observed_first_record_corruption_stays_after_directory_removal(tmp_path):
+    import shutil
+
+    root, path, _ = seeded(tmp_path, n=1)
+    path.write_bytes(b"not json\n")
+    led = ReceiptLedger(root)
+    with pytest.raises(LedgerCorruptionError) as caught:
+        led.chain_head(ORGAN)
+    diagnostic = caught.value.as_dict()
+    assert diagnostic["position"] == 1
+    assert led.health()["organs"][ORGAN]["count"] == 0
+    shutil.rmtree(path.parent)
+    with pytest.raises(LedgerCorruptionError) as again:
+        led.chain_head(ORGAN)
+    assert again.value.as_dict() == diagnostic
+    assert not path.parent.exists()
+    with pytest.raises(LedgerCorruptionError) as refused:
+        led.append(receipt(2))
+    assert refused.value.as_dict() == diagnostic
+    assert snapshot(root) == {}
+    # Explicit reload is the existing, intentional reset boundary.
+    led.reload()
+    assert led.chain_head(ORGAN)["count"] == 0
+
+
+def test_observed_valid_shortened_chain_has_no_restart_anchor(tmp_path):
+    root, path, led = seeded(tmp_path, n=2)
+    led.chain_head(ORGAN)
+    path.write_bytes(read_lines(path)[0])
+    before = snapshot(root)
+    fresh = ReceiptLedger(root)
+    assert fresh.chain_head(ORGAN)["chain_index"] == 1
+    assert fresh.verify_chain(ORGAN)["ok"] is True
+    led.reload()
+    assert led.chain_head(ORGAN) == fresh.chain_head(ORGAN)
+    assert snapshot(root) == before
+    assert led.append(receipt(3))["chain_index"] == 2
+
+# ------------------------------------ immediately acknowledged observations --
+
+@pytest.mark.parametrize("batch", [False, True])
+@pytest.mark.parametrize("removal", ["last_line", "newest_partition"])
+def test_acknowledged_tail_loss_refuses_before_any_refresh(tmp_path, batch, removal):
+    root = str(tmp_path / "ledger")
+    led = ReceiptLedger(root)
+    last_ts = (f"{DAY}T00:00:01Z" if removal == "last_line"
+               else "2026-10-01T00:00:00Z")
+    records = [receipt(1), receipt(2, ts=last_ts)]
+    if batch:
+        accepted = led.append_batch(records)["results"]
+    else:
+        accepted = [led.append(rec) for rec in records]
+    last = accepted[-1]
+    assert last["accepted"] is True
+    assert last["chain_index"] == last["ledger_offset"] == 2
+    # No head, health, query, append, verify or reload between acknowledgment
+    # and mutation: the confirmed write itself must retain its checkpoint.
+    if removal == "last_line":
+        path = Path(root) / ORGAN / f"{DAY}.ndjson"
+        path.write_bytes(read_lines(path)[0])
+    else:
+        path = Path(root) / ORGAN / "2026-10-01.ndjson"
+        path.unlink()
+    before = snapshot(root)
+    with pytest.raises(LedgerCorruptionError) as caught:
+        led.append(receipt(3))
+    assert caught.value.reason == "observed_tail_missing"
+    assert caught.value.position == 2
+    assert last["chain_head"] in caught.value.detail
+    assert snapshot(root) == before
+
+
+@pytest.mark.parametrize("batch", [False, True])
+def test_acknowledged_rewritten_last_record_refuses_before_refresh(tmp_path, batch):
+    root = str(tmp_path / "ledger")
+    led = ReceiptLedger(root)
+    if batch:
+        last = led.append_batch([receipt(1), receipt(2)])["results"][-1]
+    else:
+        led.append(receipt(1))
+        last = led.append(receipt(2))
+    path = Path(root) / ORGAN / f"{DAY}.ndjson"
+    lines = read_lines(path)
+    env = json.loads(lines[-1])
+    env["ts"] = f"{DAY}T00:00:01Z"
+    env["chain_hash"] = link_hash(env)
+    path.write_bytes(lines[0] + dump(env))
+    before = snapshot(root)
+    with pytest.raises(LedgerCorruptionError) as caught:
+        led.append(receipt(3))
+    assert caught.value.reason == "observed_head_mismatch"
+    assert (caught.value.position, caught.value.line) == (2, 2)
+    assert last["chain_head"] in caught.value.detail
+    assert snapshot(root) == before
+    assert led.verify_chain(ORGAN)["ok"] is True
+
+
+@pytest.mark.parametrize("batch", [False, True])
+def test_acknowledged_state_and_response_stay_consistent(tmp_path, batch):
+    root = str(tmp_path / "ledger")
+    led = ReceiptLedger(root)
+    records = [receipt(1), receipt(2, ts="2026-10-01T00:00:00Z")]
+    results = (led.append_batch(records)["results"] if batch
+               else [led.append(rec) for rec in records])
+    assert [r["chain_index"] for r in results] == [1, 2]
+    assert [r["ledger_offset"] for r in results] == [1, 2]
+    st = led._states[ORGAN]
+    assert st.chain_index == st.count == 2
+    assert st.chain_head == results[-1]["chain_head"]
+    assert st.seen == {"r1", "r2"}
+    for name, (offset, lines) in st.files.items():
+        path = Path(root) / ORGAN / name
+        assert offset == path.stat().st_size
+        assert lines == len(read_lines(path))
+    duplicate = led.append(receipt(2))
+    assert duplicate["duplicate"] is True
+    assert duplicate["chain_index"] == duplicate["ledger_offset"] == 2
+    assert duplicate["chain_head"] == results[-1]["chain_head"]
+    assert led.chain_head(ORGAN)["chain_head"] == results[-1]["chain_head"]
+
+
+@pytest.mark.parametrize("failure", ["before_write", "partial_write", "fsync"])
+def test_acknowledged_write_failure_never_advances_observation(
+        tmp_path, monkeypatch, failure):
+    import szl_lake_store as store
+
+    root, path, led = seeded(tmp_path, n=1)
+    observed = led.chain_head(ORGAN)
+    original_bytes = path.read_bytes()
+
+    def fail_before_write(path_arg, data):
+        raise OSError("injected pre-write failure")
+
+    def fail_after_partial_write(path_arg, data):
+        with open(path_arg, "ab") as fh:
+            fh.write(data[:13])
+        raise OSError("injected partial-write failure")
+
+    def fail_fsync(fd):
+        raise OSError("injected fsync failure")
+
+    with monkeypatch.context() as patcher:
+        if failure == "fsync":
+            patcher.setattr(store.os, "fsync", fail_fsync)
+        else:
+            patcher.setattr(store, "_append_durably", (
+                fail_before_write if failure == "before_write"
+                else fail_after_partial_write))
+        with pytest.raises(OSError, match="injected"):
+            led.append(receipt(2))
+    st = led._states[ORGAN]
+    assert st.chain_index == st.count == observed["chain_index"] == 1
+    assert st.chain_head == observed["chain_head"]
+    assert st.seen == {"r1"}
+    assert st.files[path.name][0] == len(original_bytes)
+
+    if failure == "partial_write":
+        dirty = snapshot(root)
+        assert path.read_bytes() != original_bytes
+        with pytest.raises(LedgerCorruptionError) as caught:
+            led.append(receipt(3))
+        assert caught.value.reason == "unterminated_record"
+        assert snapshot(root) == dirty
+    else:
+        if failure == "before_write":
+            assert path.read_bytes() == original_bytes
+        else:
+            # Real _append_durably wrote a complete record before fsync failed.
+            # Failure does not promise unchanged bytes or durable acknowledgment.
+            assert len(read_lines(path)) == 2
+            path.write_bytes(original_bytes)
+        # Removing an unacknowledged failed write must not trip a phantom
+        # checkpoint. The last confirmed record (index 1) is still present.
+        assert led.append(receipt(3))["chain_index"] == 2
+
+
+@pytest.mark.parametrize("failure", ["invalid_item", "partial_write"])
+def test_acknowledged_partial_batch_retains_successful_item(
+        tmp_path, monkeypatch, failure):
+    import szl_lake_store as store
+
+    root = str(tmp_path / "ledger")
+    led = ReceiptLedger(root)
+    path = Path(root) / ORGAN / f"{DAY}.ndjson"
+    original_append = store._append_durably
+    calls = 0
+
+    def second_write_fails(path_arg, data):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            original_append(path_arg, data)
+        else:
+            with open(path_arg, "ab") as fh:
+                fh.write(data[:13])
+            raise OSError("injected second-item failure")
+
+    if failure == "invalid_item":
+        with pytest.raises(ValueError):
+            led.append_batch([receipt(1), []])
+    else:
+        with monkeypatch.context() as patcher:
+            patcher.setattr(store, "_append_durably", second_write_fails)
+            with pytest.raises(OSError, match="injected"):
+                led.append_batch([receipt(1), receipt(2)])
+    # Batch is not all-or-nothing: item 1 succeeded even though no batch
+    # response was returned. Its checkpoint must survive the later failure.
+    st = led._states[ORGAN]
+    assert st.chain_index == st.count == 1
+    first = json.loads(read_lines(path)[0])
+    assert st.chain_head == first["chain_hash"]
+    path.unlink()
+    with pytest.raises(LedgerCorruptionError) as caught:
+        led.append(receipt(3))
+    assert caught.value.reason == "observed_tail_missing"
+    assert first["chain_hash"] in caught.value.detail
+    assert snapshot(root) == {}

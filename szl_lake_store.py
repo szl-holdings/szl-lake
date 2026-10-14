@@ -42,8 +42,16 @@ that fails (including an unterminated trailing record left by a torn write)
 puts that organ into a read-only corrupted state: ``append``/``chain_head``
 raise ``LedgerCorruptionError`` naming the file, line and reason, and
 ``health`` reports it. Nothing is healed, truncated or deleted — the corrupt
-bytes stay exactly as found for an operator to inspect. ``reload()`` re-runs
-recovery from disk.
+bytes stay exactly as found for an operator to inspect. Every refresh fully
+replays disk and must reach this instance's previous observed index with the
+same hash. A missing observed tail or rewritten observed head is sticky
+corruption too. This costs O(total organ ledger bytes) per refresh/append.
+``reload()`` drops that observation and re-runs recovery from disk; neither a
+fresh instance nor reload can detect a self-consistent historical rollback
+without an independently trusted head. Each successful append records its
+returned head as an observation after fsync and before releasing the locks.
+A write/fsync exception does not acknowledge the attempted head; bytes may
+still have reached disk and will be validated by the next replay.
 
 Writer contract (multi-process). Each organ has an OS-level exclusive lock
 file, ``<root>/<organ>/.writer.lock`` (``fcntl.flock`` on POSIX,
@@ -97,7 +105,8 @@ class LedgerCorruptionError(RuntimeError):
     is a stable kind (``unparseable_line``, ``unterminated_record``,
     ``malformed_envelope``, ``organ_mismatch``, ``index_discontinuity``,
     ``prev_hash_mismatch``, ``chain_hash_mismatch``, ``malformed_receipt``,
-    ``receipt_id_mismatch``, ``duplicate_receipt_id``, and from ``query`` only
+    ``receipt_id_mismatch``, ``duplicate_receipt_id``,
+    ``observed_tail_missing``, ``observed_head_mismatch``, and from ``query`` only
     ``truncated_after_validation``). The bytes on disk are
     left untouched.
     """
@@ -282,7 +291,7 @@ class _OrganState:
     """In-memory mirror of one organ's VALIDATED on-disk chain."""
 
     __slots__ = ("seen", "chain_index", "chain_head", "count", "files",
-                 "tail", "corruption")
+                 "corruption")
 
     def __init__(self) -> None:
         self.seen: set[str] = set()
@@ -292,9 +301,6 @@ class _OrganState:
         # partition basename -> [validated byte offset, validated line count],
         # in stored (sorted) order.
         self.files: dict[str, list[int]] = {}
-        # (basename, byte offset, raw bytes) of the head record, re-read under
-        # the writer lock before the cached state is trusted again.
-        self.tail: tuple[str, int, bytes] | None = None
         self.corruption: LedgerCorruptionError | None = None
 
 
@@ -389,34 +395,8 @@ class ReceiptLedger:
             os.close(fd)
 
     # ---- state recovery (validating replay) -----------------------------
-    def _cache_is_current_prefix(self, organ: str, st: _OrganState,
-                                 listing: list[tuple[str, str, int]]) -> bool:
-        """True when disk is a pure append-extension of what st validated.
-
-        Earlier partitions must be unchanged in size, the last validated
-        partition may only have grown, and the validated head record must
-        still be byte-identical on disk. Anything else forces a full replay.
-        """
-        cached = list(st.files.items())
-        if len(listing) < len(cached):
-            return False
-        for i, (name, (offset, _)) in enumerate(cached):
-            disk_name, _, disk_size = listing[i]
-            if disk_name != name:
-                return False
-            if disk_size < offset or (i < len(cached) - 1
-                                      and disk_size != offset):
-                return False
-        if st.tail is not None:
-            name, start, raw = st.tail
-            with open(os.path.join(self._organ_dir(organ), name), "rb") as fh:
-                fh.seek(start)
-                if fh.read(len(raw)) != raw:
-                    return False
-        return True
-
-    def _admit(self, st: _OrganState, organ: str,
-               body: bytes) -> tuple[str, str] | None:
+    def _admit(self, st: _OrganState, organ: str, body: bytes,
+               checkpoint: _OrganState | None = None) -> tuple[str, str] | None:
         """Validate one persisted record against st; admit it or say why not."""
         try:
             env = json.loads(body.decode("utf-8"))
@@ -476,6 +456,12 @@ class ReceiptLedger:
             return "duplicate_receipt_id", (
                 f"receipt_id {_short(rid)} already appears earlier in the chain")
 
+        if (checkpoint is not None and ci == checkpoint.chain_index
+                and stored_hash != checkpoint.chain_head):
+            return "observed_head_mismatch", (
+                f"previously observed index {ci} had hash "
+                f"{checkpoint.chain_head}; replay has {stored_hash}")
+
         st.seen.add(rid)
         st.chain_index = ci
         st.chain_head = stored_hash
@@ -483,10 +469,12 @@ class ReceiptLedger:
         return None
 
     def _replay(self, organ: str, st: _OrganState,
-                listing: list[tuple[str, str, int]]) -> None:
-        """Validate every not-yet-validated byte of every partition, in order.
+                listing: list[tuple[str, str, int]],
+                checkpoint: _OrganState | None = None) -> None:
+        """Validate all bytes and retain the prior observed chain checkpoint.
 
-        Stops at the first bad record and records it on ``st.corruption``.
+        Stops at the first bad record or missing observation and records it
+        on ``st.corruption``. Call with a fresh candidate state.
         """
         for name, path, _ in listing:
             pos, lineno = st.files.get(name, (0, 0))
@@ -506,16 +494,29 @@ class ReceiptLedger:
                         break
                     body = raw.strip()
                     if body:
-                        problem = self._admit(st, organ, body)
+                        problem = self._admit(st, organ, body, checkpoint)
                         if problem is not None:
                             st.files[name] = [pos, lineno]
                             self._mark_corrupt(st, organ, path, lineno + 1,
                                                *problem)
                             return
-                        st.tail = (name, pos, raw)
                     pos += len(raw)
                     lineno += 1
             st.files[name] = [pos, lineno]
+        if checkpoint is not None and st.chain_index < checkpoint.chain_index:
+            # Locate the first missing validated prefix, including a removed
+            # partition. The checkpoint identifies the history we had seen.
+            name = next(reversed(checkpoint.files))
+            for prior_name, (offset, _) in checkpoint.files.items():
+                if st.files.get(prior_name, [0, 0])[0] < offset:
+                    name = prior_name
+                    break
+            line = st.files.get(name, [0, 0])[1] + 1
+            self._mark_corrupt(
+                st, organ, os.path.join(self._organ_dir(organ), name), line,
+                "observed_tail_missing",
+                f"replay ended at index {st.chain_index}; previously observed "
+                f"index {checkpoint.chain_index} with hash {checkpoint.chain_head}")
 
     def _mark_corrupt(self, st: _OrganState, organ: str, path: str, line: int,
                       reason: str, detail: str) -> None:
@@ -527,19 +528,18 @@ class ReceiptLedger:
     def _refresh_locked(self, organ: str) -> _OrganState:
         """Bring the organ's state up to date with disk (lock already held).
 
-        Validates only what this instance has not yet validated (e.g. records
-        another writer appended); falls back to a full validating replay when
-        disk is not a pure extension of the cached view. A recorded
+        Full replay detects edits hidden by equal file sizes/head bytes.
+        The replay must also reach and match the prior observed checkpoint,
+        so a valid shortened/rewritten history cannot replace it. A recorded
         corruption is sticky until ``reload()``.
         """
-        st = self._states.get(organ)
-        if st is not None and st.corruption is not None:
-            return st
+        prior = self._states.get(organ)
+        if prior is not None and prior.corruption is not None:
+            return prior
         listing = [(os.path.basename(p), p, os.path.getsize(p))
                    for p in self._iter_partition_files(organ)]
-        if st is None or not self._cache_is_current_prefix(organ, st, listing):
-            st = _OrganState()
-        self._replay(organ, st, listing)
+        st = _OrganState()
+        self._replay(organ, st, listing, prior)
         self._states[organ] = st
         return st
 
@@ -548,8 +548,14 @@ class ReceiptLedger:
             if lock == "absent":
                 # Nothing on disk. Do not scan: a writer may be creating the
                 # directory right now, outside any lock this reader holds.
-                self._states.pop(organ, None)
-                return _OrganState()
+                prior = self._states.get(organ)
+                if prior is not None and prior.corruption is not None:
+                    return prior
+                st = _OrganState()
+                if prior is not None and prior.chain_index:
+                    self._replay(organ, st, [], prior)
+                    self._states[organ] = st
+                return st
             return self._refresh_locked(organ)
 
     @staticmethod
@@ -616,18 +622,24 @@ class ReceiptLedger:
                 name = newest
             line = json.dumps(envelope, sort_keys=True,
                               separators=(",", ":")) + "\n"
-            _append_durably(os.path.join(self._organ_dir(organ), name),
-                            line.encode("utf-8"))
-            # st is not advanced here: the next refresh validates this record
-            # from disk like any other writer's, so state never runs ahead of
-            # what is durably on disk.
+            data = line.encode("utf-8")
+            _append_durably(os.path.join(self._organ_dir(organ), name), data)
+            # Only a confirmed durable write advances the observation. Keep
+            # every field consistent before returning or releasing either
+            # lock, including the last successful item of a partial batch.
+            offset, lineno = st.files.get(name, (0, 0))
+            st.files[name] = [offset + len(data), lineno + 1]
+            st.seen.add(rid)
+            st.chain_index = chain_index
+            st.chain_head = chain_hash
+            st.count += 1
 
             return {
                 "accepted": True,
                 "duplicate": False,
                 "receipt_id": rid,
                 "organ": organ,
-                "ledger_offset": st.count + 1,
+                "ledger_offset": st.count,
                 "chain_index": chain_index,
                 "chain_head": chain_hash,
             }
