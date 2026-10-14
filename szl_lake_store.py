@@ -97,7 +97,8 @@ class LedgerCorruptionError(RuntimeError):
     is a stable kind (``unparseable_line``, ``unterminated_record``,
     ``malformed_envelope``, ``organ_mismatch``, ``index_discontinuity``,
     ``prev_hash_mismatch``, ``chain_hash_mismatch``, ``malformed_receipt``,
-    ``receipt_id_mismatch``, ``duplicate_receipt_id``). The bytes on disk are
+    ``receipt_id_mismatch``, ``duplicate_receipt_id``, and from ``query`` only
+    ``truncated_after_validation``). The bytes on disk are
     left untouched.
     """
 
@@ -656,6 +657,12 @@ class ReceiptLedger:
         """Return stored envelopes, newest-first, filtered by organ/since.
 
         since: ISO timestamp; only receipts with ts >= since are returned.
+
+        Reads only each organ's validated chain (the byte prefix recovery
+        accepted), so a concurrent writer's in-flight line is never returned
+        half-written. Raises LedgerCorruptionError when a requested organ's
+        persisted chain failed validation, rather than silently skipping the
+        bad records and presenting the remainder as complete.
         """
         limit = max(0, int(limit))
         organs = [normalize_organ(organ)] if organ else self._list_organs()
@@ -664,21 +671,31 @@ class ReceiptLedger:
         out: list[dict] = []
         with self._lock:
             for org in organs:
-                for path in self._iter_partition_files(org):
-                    with open(path, "r", encoding="utf-8") as fh:
-                        for line in fh:
-                            line = line.strip()
-                            if not line:
+                st = self._state(org)
+                self._raise_if_corrupt(st)
+                d = self._organ_dir(org)
+                for name, (validated_bytes, _lines) in list(st.files.items()):
+                    with open(os.path.join(d, name), "rb") as fh:
+                        data = fh.read(validated_bytes)
+                    if len(data) != validated_bytes:
+                        raise LedgerCorruptionError(
+                            org, os.path.join(d, name), 0, -1, "truncated_after_validation",
+                            f"read {len(data)} of {validated_bytes} validated bytes", name)
+                    for lineno, raw in enumerate(data.splitlines(), start=1):
+                        if not raw.strip():
+                            continue
+                        try:
+                            env = json.loads(raw)
+                        except ValueError:
+                            # Validated bytes no longer parse: rewritten in place.
+                            raise LedgerCorruptionError(
+                                org, os.path.join(d, name), lineno, -1, "unparseable_line",
+                                "validated record no longer parses", name) from None
+                        if since_dt is not None:
+                            env_dt = _parse_dt(env.get("ts"))
+                            if env_dt is not None and env_dt < since_dt:
                                 continue
-                            try:
-                                env = json.loads(line)
-                            except json.JSONDecodeError:
-                                continue
-                            if since_dt is not None:
-                                env_dt = _parse_dt(env.get("ts"))
-                                if env_dt is not None and env_dt < since_dt:
-                                    continue
-                            out.append(env)
+                        out.append(env)
         # newest-first by ingest order: sort by (ts, chain_index)
         out.sort(key=lambda e: (str(e.get("ts")), e.get("chain_index") or 0),
                  reverse=True)
