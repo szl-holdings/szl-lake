@@ -53,14 +53,14 @@ def emit_receipt(receipt: dict,
     except (TypeError, ValueError) as e:
         return {"ok": False, "reason": f"receipt not JSON-serializable: {e}"}
 
-    req = urllib.request.Request(
-        _endpoint(base),
-        data=body,
-        method="POST",
-        headers={"Content-Type": "application/json",
-                 "User-Agent": "szl-lake-client/1.0"},
-    )
     try:
+        req = urllib.request.Request(
+            _endpoint(base),
+            data=body,
+            method="POST",
+            headers={"Content-Type": "application/json",
+                     "User-Agent": "szl-lake-client/1.0"},
+        )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
             try:
@@ -89,14 +89,14 @@ def emit_batch(receipts: list[dict],
     except (TypeError, ValueError) as e:
         return {"ok": False, "reason": f"receipt not JSON-serializable: {e}"}
 
-    req = urllib.request.Request(
-        _endpoint(base),
-        data=body,
-        method="POST",
-        headers={"Content-Type": "application/x-ndjson",
-                 "User-Agent": "szl-lake-client/1.0"},
-    )
     try:
+        req = urllib.request.Request(
+            _endpoint(base),
+            data=body,
+            method="POST",
+            headers={"Content-Type": "application/x-ndjson",
+                     "User-Agent": "szl-lake-client/1.0"},
+        )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
             try:
