@@ -119,10 +119,20 @@ and `szl_lake_query.py` returned a stub. This is the real ingest + query path.
 
 **Run it**
 
+From a checkout, install the HTTP server's optional dependencies first:
+
 ```bash
+python -m pip install ".[serve]"
 uvicorn szl_lake_server:app --host 0.0.0.0 --port 8088
 # store root: $SZL_LAKE_DIR (default ./khipu)
 ```
+
+The base install remains usable without FastAPI. `Installed lake server` CI
+installs the `serve` extra, runs the HTTP tests, and checks the installed package
+outside the checkout using a disposable synthetic ledger. The check covers
+ingest/query, persistence after reopening, duplicate handling, chain verification,
+and rejection of corrupted data. This is package qualification, not evidence of
+a deployed server or production receipt ingestion.
 
 ### Endpoints (`/api/lake/v1`)
 
