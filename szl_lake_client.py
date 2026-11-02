@@ -50,7 +50,7 @@ def emit_receipt(receipt: dict,
 
     try:
         body = json.dumps(receipt).encode("utf-8")
-    except (TypeError, ValueError) as e:
+    except (TypeError, ValueError, RecursionError) as e:
         return {"ok": False, "reason": f"receipt not JSON-serializable: {e}"}
 
     try:
@@ -86,7 +86,7 @@ def emit_batch(receipts: list[dict],
 
     try:
         body = "\n".join(json.dumps(r) for r in receipts).encode("utf-8")
-    except (TypeError, ValueError) as e:
+    except (TypeError, ValueError, RecursionError) as e:
         return {"ok": False, "reason": f"receipt not JSON-serializable: {e}"}
 
     try:
