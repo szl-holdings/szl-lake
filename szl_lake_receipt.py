@@ -7,7 +7,7 @@ szl-lake durably stores governance receipts (szl_lake_store.ReceiptLedger) and
 anchors signed proof snapshots (scripts/verify_lutar_lean_receipts.py). Those
 paths each carry their OWN provenance (the SHA3-256 Khipu chain, the cosign
 attestation bundle). This module binds a lake object to the ONE org-canonical
-receipt shape by DELEGATING to the shared ``szl_receipt`` library (v0.2.0) — it
+receipt shape by DELEGATING to the shared ``szl_receipt`` library (v0.3.1) - it
 does NOT re-implement receipt digests, canonicalization, DSSE signing, or the
 in-toto statement. It is the same fold ``yarqa`` and ``governed-inference-meter``
 already landed on the spine.
@@ -37,7 +37,8 @@ Honesty (doctrine v11)
 * Keyless => UNSIGNED-honest (``signed=False``); a signature is never faked.
 * The canonical body is deterministic (no timestamp / nonce): identical inputs
   serialize to byte-identical canonical JSON and the same digest.
-* ``szl_receipt`` is an OPTIONAL dependency (pinned ``szl-receipt==0.2.0`` — see
+* ``szl_receipt`` is an OPTIONAL dependency (pinned
+  ``szl-receipt-dsse==0.3.1`` - see
   ``requirements-attest.txt``). Importing this module never requires it; only
   producing a canonical receipt does. When absent this raises
   :class:`LakeReceiptUnavailable` rather than fabricating a receipt — the
@@ -71,8 +72,8 @@ def _require_szl_receipt():
         from szl_receipt import attest  # type: ignore
     except Exception as exc:  # pragma: no cover - exercised only without the lib
         raise LakeReceiptUnavailable(
-            "szl_receipt (v0.2.0) is not installed; install "
-            "`szl-receipt==0.2.0` (see requirements-attest.txt) to fold "
+            "szl_receipt (v0.3.1) is not installed; install "
+            "`szl-receipt-dsse==0.3.1` (see requirements-attest.txt) to fold "
             "szl-lake objects onto the canonical receipt spine. Refusing to "
             "duplicate the shared receipt shapes."
         ) from exc

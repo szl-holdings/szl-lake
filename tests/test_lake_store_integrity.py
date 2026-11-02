@@ -8,7 +8,15 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from szl_lake_store import ReceiptLedger  # noqa: E402
+from szl_lake_store import (  # noqa: E402
+    CHAIN_HASH,
+    LEGACY_SCHEMA,
+    SCHEMA,
+    ReceiptIdentityConflict,
+    ReceiptLedger,
+    _link_hash,
+    canonical_hash,
+)
 
 
 @pytest.fixture
@@ -95,15 +103,107 @@ def test_idless_body_edit_still_rejects(stored_receipt):
     result = ledger.verify_chain('audit')
     assert result['ok'] is False
     assert [finding['kind'] for finding in result['broken']] == [
-        'receipt_id_mismatch',
+        'receipt_id_mismatch', 'receipt_body_hash_mismatch',
     ]
 
 
-def test_explicit_identity_retains_documented_payload_scope(stored_receipt):
+def test_v2_explicit_identity_commits_complete_body(stored_receipt):
     ledger, path, envelope = stored_receipt('id')
+    assert envelope['schema'] == SCHEMA
+    assert envelope['receipt_body_hash'] == canonical_hash(envelope['receipt'])
     envelope['receipt']['decision'] = 'REJECT'
     rewrite(path, [envelope])
-    # The chain commits the supplied identity; signature checks are separate.
+    result = ledger.verify_chain('audit')
+    assert result['ok'] is False
+    assert [finding['kind'] for finding in result['broken']] == [
+        'receipt_body_hash_mismatch',
+    ]
+    # The committed head remains stable while readback exposes the body edit.
+    assert result['chain_head'] == envelope['chain_hash']
+
+
+def test_same_identity_different_body_is_not_acknowledged(tmp_path):
+    ledger = ReceiptLedger(str(tmp_path / 'ledger'))
+    original = {
+        'id': 'same-id',
+        'organ': 'audit',
+        'ts': '2026-09-30T00:00:00Z',
+        'decision': 'ADMIT',
+    }
+    first = ledger.append(original)
+    path = next((tmp_path / 'ledger' / 'audit').glob('*.ndjson'))
+    before = path.read_bytes()
+
+    changed = dict(original, decision='REJECT')
+    with pytest.raises(ReceiptIdentityConflict) as caught:
+        ledger.append(changed)
+    assert caught.value.receipt_id == 'same-id'
+    assert caught.value.expected_hash == first['receipt_body_hash']
+    assert caught.value.received_hash == canonical_hash(changed)
+    assert path.read_bytes() == before
+
+    duplicate = ledger.append(original)
+    assert duplicate['accepted'] is False
+    assert duplicate['duplicate'] is True
+    assert duplicate['receipt_body_hash'] == first['receipt_body_hash']
+
+
+def test_append_response_and_query_readback_share_body_hash(tmp_path):
+    ledger = ReceiptLedger(str(tmp_path / 'ledger'))
+    receipt = {
+        'id': 'readback-id',
+        'organ': 'audit',
+        'ts': '2026-09-30T00:00:00Z',
+        'source_commit': 'a' * 40,
+        'artifact_digest': 'sha256:' + 'b' * 64,
+    }
+    accepted = ledger.append(receipt)
+    [stored] = ledger.query(organ='audit')
+
+    assert accepted['receipt_body_hash'] == canonical_hash(receipt)
+    assert stored['receipt_body_hash'] == accepted['receipt_body_hash']
+    assert stored['receipt'] == receipt
+    assert ledger.verify_chain('audit')['ok'] is True
+
+
+def test_legacy_v1_chain_replays_and_extends_with_v2(tmp_path):
+    root = tmp_path / 'ledger'
+    organ_dir = root / 'audit'
+    organ_dir.mkdir(parents=True)
+    receipt = {
+        'id': 'legacy-id',
+        'organ': 'audit',
+        'ts': '2026-09-30T00:00:00Z',
+        'decision': 'ADMIT',
+    }
+    chain_hash = _link_hash(
+        None, receipt['id'], receipt['organ'], receipt['ts'], 1)
+    legacy = {
+        'schema': LEGACY_SCHEMA,
+        'chain_alg': CHAIN_HASH,
+        'organ': receipt['organ'],
+        'receipt_id': receipt['id'],
+        'prev_hash': None,
+        'chain_hash': chain_hash,
+        'chain_index': 1,
+        'ts': receipt['ts'],
+        'ingested_at': receipt['ts'],
+        'energy': {'label': 'UNAVAILABLE'},
+        'receipt': receipt,
+    }
+    rewrite(organ_dir / '2026-09-30.ndjson', [legacy])
+
+    ledger = ReceiptLedger(str(root))
+    assert ledger.verify_chain('audit')['ok'] is True
+    second = ledger.append({
+        'id': 'v2-id',
+        'organ': 'audit',
+        'ts': '2026-09-30T00:00:01Z',
+        'decision': 'ADMIT',
+    })
+    assert second['chain_index'] == 2
+    stored = ledger.query(organ='audit')
+    assert [row['schema'] for row in stored] == [SCHEMA, LEGACY_SCHEMA]
     assert ledger.verify_chain('audit')['ok'] is True
 
 

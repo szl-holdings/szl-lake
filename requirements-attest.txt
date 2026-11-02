@@ -4,6 +4,5 @@
 # stdlib-only and imposes NO dependency on callers. This file pins the ONLY
 # optional dependency needed to fold a lake object onto the org-canonical
 # receipt spine via szl_lake_receipt.emit_lake_receipt(...). Pinned exactly to
-# the canonical library release (v0.2.0), the same pin every other spine
-# producer (yarqa, governed-inference-meter) uses.
+# the currently published canonical library release (v0.3.1).
 szl-receipt-dsse==0.3.1
