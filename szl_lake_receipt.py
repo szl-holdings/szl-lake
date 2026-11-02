@@ -303,12 +303,12 @@ def verify_lake_receipt(
 
     Delegates the cryptographic check to :func:`szl_receipt.verify_receipt`
     (keyless envelopes honestly return ``(False, "unsigned-honest")``). When any
-    rebind argument is supplied, additionally confirms the signed body's
-    ``input_digest`` / ``stored_object_digest`` re-derive from the object held
-    independently — so any post-hoc edit flips a digest and fails the rebind.
-    ``anchor_id`` and ``policy_id`` also constrain the subject and policy when
-    supplied on their own. Omitting ``policy_id`` leaves policy unconstrained;
-    explicitly passing ``DEFAULT_POLICY_ID`` requires that exact policy.
+    subject or digest rebind argument is supplied, additionally confirms the
+    signed body's subject matches the requested ``anchor_id`` and its supplied
+    ``input_digest`` / ``stored_object_digest`` bindings re-derive from the
+    object held independently. An explicit ``policy_id`` constrains the signed
+    policy, including when supplied alone. Omitting it leaves policy
+    unconstrained; passing ``DEFAULT_POLICY_ID`` requires that exact policy.
     """
     szl_receipt, _ = _require_szl_receipt()
     ok, detail = szl_receipt.verify_receipt(envelope, public_key_pem)
