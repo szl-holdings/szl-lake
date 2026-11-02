@@ -295,7 +295,7 @@ def verify_lake_receipt(
     anchor_id: Any = None,
     input: Any = None,
     stored_object: Any = None,
-    policy_id: str = DEFAULT_POLICY_ID,
+    policy_id: Optional[str] = None,
     input_digest: Optional[str] = None,
     stored_object_digest: Optional[str] = None,
 ) -> tuple[bool, str]:
@@ -306,6 +306,9 @@ def verify_lake_receipt(
     rebind argument is supplied, additionally confirms the signed body's
     ``input_digest`` / ``stored_object_digest`` re-derive from the object held
     independently — so any post-hoc edit flips a digest and fails the rebind.
+    ``anchor_id`` and ``policy_id`` also constrain the subject and policy when
+    supplied on their own. Omitting ``policy_id`` leaves policy unconstrained;
+    explicitly passing ``DEFAULT_POLICY_ID`` requires that exact policy.
     """
     szl_receipt, _ = _require_szl_receipt()
     ok, detail = szl_receipt.verify_receipt(envelope, public_key_pem)
@@ -314,7 +317,7 @@ def verify_lake_receipt(
 
     rebind = any(
         x is not None
-        for x in (input, stored_object, input_digest, stored_object_digest)
+        for x in (anchor_id, policy_id, input, stored_object, input_digest, stored_object_digest)
     )
     if not rebind:
         return True, "ok"
@@ -326,6 +329,9 @@ def verify_lake_receipt(
         body = json.loads(base64.b64decode(envelope["payload"]).decode("utf-8"))
     except Exception as exc:  # noqa: BLE001
         return False, f"payload decode error: {exc}"
+
+    if not isinstance(body, dict):
+        return False, "payload-not-object"
 
     if input is not None or input_digest is not None:
         exp_idig = (
@@ -347,5 +353,10 @@ def verify_lake_receipt(
 
     if anchor_id is not None and body.get("subject") != str(anchor_id):
         return False, "subject-rebind-mismatch"
+
+    if policy_id is not None:
+        policy = body.get("policy")
+        if not isinstance(policy, dict) or policy.get("id") != str(policy_id):
+            return False, "policy-rebind-mismatch"
 
     return True, "ok"

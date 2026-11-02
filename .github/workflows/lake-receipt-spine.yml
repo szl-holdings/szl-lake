@@ -1,0 +1,42 @@
+name: Lake receipt identity binding
+
+on:
+  pull_request:
+    paths:
+      - szl_lake_receipt.py
+      - szl_lake_store.py
+      - scripts/test_lake_receipt_spine.py
+      - requirements-attest.txt
+      - .github/workflows/lake-receipt-spine.yml
+  push:
+    branches: [main]
+    paths:
+      - szl_lake_receipt.py
+      - szl_lake_store.py
+      - scripts/test_lake_receipt_spine.py
+      - requirements-attest.txt
+      - .github/workflows/lake-receipt-spine.yml
+
+permissions:
+  contents: read
+
+jobs:
+  receipt-spine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install the declared signing dependency
+        run: python -m pip install "pytest==8.3.5" -r requirements-attest.txt
+      - name: Verify signed bindings without skipping the spine dependency
+        run: |
+          python -c "import szl_receipt"
+          python -m pytest -q scripts/test_lake_receipt_spine.py

@@ -174,6 +174,52 @@ def test_tampered_stored_object_fails_rebind():
     assert "stored-object-digest-rebind-mismatch" in detail
 
 
+@pytest.mark.parametrize("expected", ["other-anchor", ""])
+def test_anchor_only_rebind_rejects_a_different_subject(expected):
+    priv, pub = szl_receipt.generate_keypair()
+    env = slr.emit_ledger_envelope_receipt(LEDGER_ENVELOPE, private_key_pem=priv)
+    assert slr.verify_lake_receipt(env, public_key_pem=pub, anchor_id="r-abc123")[0]
+    assert slr.verify_lake_receipt(env, public_key_pem=pub, anchor_id=expected) == (
+        False, "subject-rebind-mismatch")
+
+
+@pytest.mark.parametrize("expected", [slr.DEFAULT_POLICY_ID, "another-policy", ""])
+def test_policy_only_rebind_rejects_a_different_policy(expected):
+    priv, pub = szl_receipt.generate_keypair()
+    env = slr.emit_ledger_envelope_receipt(
+        LEDGER_ENVELOPE, private_key_pem=priv, policy_id="custom-policy")
+    # Omitting a policy constraint still performs signature-only verification.
+    assert slr.verify_lake_receipt(env, public_key_pem=pub)[0]
+    assert slr.verify_lake_receipt(env, public_key_pem=pub, policy_id="custom-policy")[0]
+    assert slr.verify_lake_receipt(env, public_key_pem=pub, policy_id=expected) == (
+        False, "policy-rebind-mismatch")
+
+
+def test_identity_constraints_do_not_replace_signature_verification():
+    priv, pub = szl_receipt.generate_keypair()
+    env = slr.emit_ledger_envelope_receipt(LEDGER_ENVELOPE, private_key_pem=priv)
+    _, wrong_pub = szl_receipt.generate_keypair()
+    assert slr.verify_lake_receipt(
+        env, public_key_pem=wrong_pub, anchor_id="r-abc123",
+        policy_id=slr.DEFAULT_POLICY_ID)[0] is False
+    unsigned = slr.emit_ledger_envelope_receipt(LEDGER_ENVELOPE)
+    assert slr.verify_lake_receipt(
+        unsigned, public_key_pem=pub, anchor_id="r-abc123",
+        policy_id=slr.DEFAULT_POLICY_ID) == (False, "unsigned-honest")
+
+
+@pytest.mark.parametrize("policy", [None, [], "custom-policy"])
+def test_signed_malformed_policy_fails_explicit_constraint(policy):
+    priv, pub = szl_receipt.generate_keypair()
+    body = slr.build_lake_receipt_body(anchor_id="fixture", input={})
+    body["policy"] = policy
+    env = szl_receipt.sign_receipt(
+        szl_receipt.Receipt(kind=slr.CANONICAL_KIND, body=body), priv)
+    assert szl_receipt.verify_receipt(env, pub)[0]
+    assert slr.verify_lake_receipt(env, public_key_pem=pub, policy_id="custom-policy") == (
+        False, "policy-rebind-mismatch")
+
+
 def test_tampered_input_fails_rebind():
     priv, pub = szl_receipt.generate_keypair()
     env = slr.emit_ledger_envelope_receipt(
