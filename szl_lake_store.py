@@ -357,13 +357,19 @@ class ReceiptLedger:
         return sorted(files)
 
     def _list_organs(self) -> list[str]:
-        if not os.path.isdir(self.root):
-            return []
-        return sorted(
-            name for name in os.listdir(self.root)
-            if os.path.isdir(os.path.join(self.root, name))
-            and _ORGAN_RE.match(name)
-        )
+        # Called under self._lock. Keep validated history and sticky corruption
+        # visible to aggregate reads even after its directory/root disappears.
+        # An empty observation has no checkpoint to preserve; reload() remains
+        # the explicit boundary that discards these process-local observations.
+        organs = {name for name, state in self._states.items()
+                  if state.chain_index or state.corruption is not None}
+        if os.path.isdir(self.root):
+            organs.update(
+                name for name in os.listdir(self.root)
+                if os.path.isdir(os.path.join(self.root, name))
+                and _ORGAN_RE.match(name)
+            )
+        return sorted(organs)
 
     # ---- cross-process writer lock --------------------------------------
     @contextlib.contextmanager
@@ -698,11 +704,11 @@ class ReceiptLedger:
         bad records and presenting the remainder as complete.
         """
         limit = max(0, int(limit))
-        organs = [normalize_organ(organ)] if organ else self._list_organs()
 
         since_dt = _parse_dt(since) if since else None
         out: list[dict] = []
         with self._lock:
+            organs = [normalize_organ(organ)] if organ else self._list_organs()
             for org in organs:
                 st = self._state(org)
                 self._raise_if_corrupt(st)
