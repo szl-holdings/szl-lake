@@ -174,6 +174,28 @@ def test_tampered_stored_object_fails_rebind():
     assert "stored-object-digest-rebind-mismatch" in detail
 
 
+@pytest.mark.parametrize("anchor_id", ["another-anchor", "", 0])
+def test_subject_only_rebind_rejects_a_different_anchor(anchor_id):
+    """A valid signature must not satisfy a different requested subject."""
+    priv, pub = szl_receipt.generate_keypair()
+    env = slr.emit_ledger_envelope_receipt(
+        LEDGER_ENVELOPE, private_key_pem=priv
+    )
+    assert slr.verify_lake_receipt(
+        env, public_key_pem=pub, anchor_id=anchor_id
+    ) == (False, "subject-rebind-mismatch")
+
+
+def test_subject_only_rebind_accepts_the_signed_anchor():
+    priv, pub = szl_receipt.generate_keypair()
+    env = slr.emit_ledger_envelope_receipt(
+        LEDGER_ENVELOPE, private_key_pem=priv
+    )
+    assert slr.verify_lake_receipt(
+        env, public_key_pem=pub, anchor_id=LEDGER_ENVELOPE["receipt_id"]
+    ) == (True, "ok")
+
+
 def test_tampered_input_fails_rebind():
     priv, pub = szl_receipt.generate_keypair()
     env = slr.emit_ledger_envelope_receipt(

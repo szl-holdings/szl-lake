@@ -303,9 +303,10 @@ def verify_lake_receipt(
 
     Delegates the cryptographic check to :func:`szl_receipt.verify_receipt`
     (keyless envelopes honestly return ``(False, "unsigned-honest")``). When any
-    rebind argument is supplied, additionally confirms the signed body's
-    ``input_digest`` / ``stored_object_digest`` re-derive from the object held
-    independently — so any post-hoc edit flips a digest and fails the rebind.
+    subject or digest rebind argument is supplied, additionally confirms the
+    signed body's subject matches the requested ``anchor_id`` and its supplied
+    ``input_digest`` / ``stored_object_digest`` bindings re-derive from the
+    object held independently.
     """
     szl_receipt, _ = _require_szl_receipt()
     ok, detail = szl_receipt.verify_receipt(envelope, public_key_pem)
@@ -314,7 +315,7 @@ def verify_lake_receipt(
 
     rebind = any(
         x is not None
-        for x in (input, stored_object, input_digest, stored_object_digest)
+        for x in (anchor_id, input, stored_object, input_digest, stored_object_digest)
     )
     if not rebind:
         return True, "ok"
