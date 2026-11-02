@@ -144,6 +144,13 @@ a deployed server or production receipt ingestion.
 | `GET /api/lake/v1/chain/verify?organ=` | Re-derive an organ's Khipu chain straight from disk and report tamper-evidence: `{ok, count, chain_head, chain_index, broken:[…]}`. Detects invalid committed fields, broken links/indices, insertion, and re-ordering. A self-consistent shortened or rehashed chain needs a trusted prior head to establish historical rollback. Returns HTTP 200 even when `ok` is `false` (a detected break is a valid result, not a request error). |
 | `GET /api/lake/v1/health` | Store reachable, total receipts, per-organ counts. |
 
+JSON object keys must be unique at every nesting level, including escaped
+spellings of the same key. Ambiguous JSON objects, arrays, and NDJSON requests
+are rejected with HTTP 400 before any receipt from that request is appended.
+Persisted records with duplicate keys fail recovery as `unparseable_line`;
+their original bytes are retained for inspection. This rejects ambiguous
+representations without changing the ledger format or signature checks.
+
 The ingest accepts the live **DSSE receipt shape** a11oy emits:
 `{id, ts, organ, decision, governance:{lambda, gates}, dsse:{payloadType, payload, signatures:[{sig, keyid}]}, energy}`.
 Receipts are partitioned on disk by `khipu/<organ>/<YYYY-MM-DD>.ndjson` (the
