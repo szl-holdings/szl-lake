@@ -35,6 +35,7 @@ from szl_lake_store import (
     LedgerLockTimeout,
     ReceiptLedger,
     get_default_ledger,
+    strict_json_loads,
 )
 
 API_PREFIX = "/api/lake/v1"
@@ -81,7 +82,7 @@ def _parse_body(raw: bytes, content_type: str) -> list[dict]:
     if not is_ndjson:
         # Try strict JSON first (object or array).
         try:
-            parsed = json.loads(text)
+            parsed = strict_json_loads(text)
         except json.JSONDecodeError:
             is_ndjson = True  # fall through to line parsing
         else:
@@ -99,7 +100,7 @@ def _parse_body(raw: bytes, content_type: str) -> list[dict]:
         if not line:
             continue
         try:
-            obj = json.loads(line)
+            obj = strict_json_loads(line)
         except json.JSONDecodeError as e:
             raise ValueError(f"NDJSON line {n} is not valid JSON: {e}")
         if not isinstance(obj, dict):

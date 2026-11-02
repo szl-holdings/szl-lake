@@ -570,5 +570,35 @@ def test_corrupted_organ_refuses_ingest_with_503(client):
     assert ok.json()["accepted"] is True
 
 
+@pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity", "1e999", "-1e999"])
+@pytest.mark.parametrize("mode", ["object", "array", "ndjson"])
+def test_http_rejects_nonfinite_receipts_before_any_batch_write(client, token, mode):
+    c, ledger = client
+    valid = '{"organ":"audit","id":"first","value":1}'
+    invalid = '{"organ":"audit","id":"bad","metadata":{"value":' + token + '}}'
+    body = {"object": invalid, "array": f"[{valid},{invalid}]",
+            "ndjson": f"{valid}\n{invalid}\n"}[mode]
+    content_type = "application/x-ndjson" if mode == "ndjson" else "application/json"
+    response = c.post("/api/lake/v1/receipts", content=body,
+                      headers={"content-type": content_type})
+    assert response.status_code == 400
+    assert ledger.query(organ="audit") == []
+    assert ledger.health()["total_receipts"] == 0
+
+
+def test_finite_values_and_strings_still_round_trip(client):
+    c, ledger = client
+    receipt = {"organ": "audit", "id": "finite", "metadata": {
+        "values": [0, 1.25, -2.5, 1e308, True, None, "NaN", "Infinity"],
+    }}
+    response = c.post("/api/lake/v1/receipts", json=receipt)
+    assert response.status_code == 200
+    assert response.json()["accepted"] is True
+    response = c.get("/api/lake/v1/receipts?organ=audit")
+    assert response.status_code == 200
+    assert response.json()["results"][0]["receipt"] == receipt
+    assert ledger.verify_chain("audit")["ok"] is True
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([os.path.abspath(__file__), "-q"]))
