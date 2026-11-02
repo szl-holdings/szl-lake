@@ -65,13 +65,16 @@ def dump(env):
 
 
 def link_hash(env):
-    return canonical_hash({
+    link = {
         "prev_hash": env["prev_hash"],
         "receipt_id": env["receipt_id"],
         "organ": env["organ"],
         "ts": env["ts"],
         "chain_index": env["chain_index"],
-    })
+    }
+    if "receipt_body_hash" in env:
+        link["receipt_body_hash"] = env["receipt_body_hash"]
+    return canonical_hash(link)
 
 
 def edit(idx, mutate):
@@ -512,7 +515,7 @@ def test_observed_checkpoint_allows_legitimate_extension(tmp_path, new_partition
     assert extension["chain_index"] == extension["ledger_offset"] == 3
     assert continued["chain_index"] == continued["ledger_offset"] == 4
     assert led.chain_head(ORGAN)["chain_head"] == continued["chain_head"]
-    assert led.append(receipt(3))["duplicate"] is True
+    assert led.append(receipt(3, ts=ts))["duplicate"] is True
     assert led.verify_chain(ORGAN)["ok"] is True
     stored = {env["chain_index"]: env for env in led.query(ORGAN)}
     assert stored[3]["prev_hash"] == observed["chain_head"]
@@ -650,7 +653,7 @@ def test_acknowledged_state_and_response_stay_consistent(tmp_path, batch):
         path = Path(root) / ORGAN / name
         assert offset == path.stat().st_size
         assert lines == len(read_lines(path))
-    duplicate = led.append(receipt(2))
+    duplicate = led.append(records[1])
     assert duplicate["duplicate"] is True
     assert duplicate["chain_index"] == duplicate["ledger_offset"] == 2
     assert duplicate["chain_head"] == results[-1]["chain_head"]

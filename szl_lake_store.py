@@ -21,6 +21,7 @@ theorem): per organ, each stored envelope links prev_hash -> chain_hash where
     chain_hash = SHA3-256( canonical_json({
         "prev_hash":   <prev chain_hash or null>,
         "receipt_id":  <this receipt's identity>,
+        "receipt_body_hash": <SHA3-256 over the complete submitted receipt>,
         "organ":       <organ>,
         "ts":          <receipt timestamp>,
         "chain_index": <1-based position in this organ's chain>,
@@ -35,9 +36,10 @@ NEVER fabricated.
 
 Recovery contract (fail closed). In-memory state is only ever derived from
 on-disk records that passed validation: every persisted line must parse to a
-v1 envelope for this organ, carry the next contiguous ``chain_index``, link
+supported envelope for this organ, carry the next contiguous ``chain_index``, link
 ``prev_hash`` to the previous record's ``chain_hash``, re-derive its own
-``chain_hash``, and bind ``receipt_id`` to its stored body. The first record
+``chain_hash``, and bind ``receipt_id`` and (for v2) ``receipt_body_hash`` to
+its stored body. The first record
 that fails (including an unterminated trailing record left by a torn write)
 puts that organ into a read-only corrupted state: ``append``/``chain_head``
 raise ``LedgerCorruptionError`` naming the file, line and reason, and
@@ -86,7 +88,9 @@ else:
 
 # Khipu locked hash: SHA3-256 (advisory BFT chain — Conjecture 2, not proven).
 CHAIN_HASH = "sha3_256"
-SCHEMA = "szl.lake.receipt/v1"
+LEGACY_SCHEMA = "szl.lake.receipt/v1"
+SCHEMA = "szl.lake.receipt/v2"
+SUPPORTED_SCHEMAS = frozenset({LEGACY_SCHEMA, SCHEMA})
 # Filesystem-safe organ name: lowercase alnum, dash, underscore, dot. Anything
 # else is rejected (prevents path traversal — organ becomes a directory name).
 _ORGAN_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
@@ -106,7 +110,8 @@ class LedgerCorruptionError(RuntimeError):
     is a stable kind (``unparseable_line``, ``unterminated_record``,
     ``malformed_envelope``, ``organ_mismatch``, ``index_discontinuity``,
     ``prev_hash_mismatch``, ``chain_hash_mismatch``, ``malformed_receipt``,
-    ``receipt_id_mismatch``, ``duplicate_receipt_id``,
+    ``receipt_id_mismatch``, ``receipt_body_hash_mismatch``,
+    ``duplicate_receipt_id``,
     ``observed_tail_missing``, ``observed_head_mismatch``, and from ``query`` only
     ``truncated_after_validation``). The bytes on disk are
     left untouched.
@@ -139,6 +144,25 @@ class LedgerCorruptionError(RuntimeError):
 
 class LedgerLockTimeout(TimeoutError):
     """The per-organ writer lock was not acquired within ``lock_timeout``."""
+
+
+class ReceiptIdentityConflict(ValueError):
+    """One receipt identity was submitted with two different bodies.
+
+    Treating a different body as an idempotent duplicate would acknowledge
+    bytes that were never stored. The ledger therefore refuses the second
+    body and leaves the chain unchanged.
+    """
+
+    def __init__(self, receipt_id: str, expected_hash: str,
+                 received_hash: str) -> None:
+        self.receipt_id = receipt_id
+        self.expected_hash = expected_hash
+        self.received_hash = received_hash
+        super().__init__(
+            f"receipt_id {receipt_id!r} already binds body hash "
+            f"{expected_hash}; received {received_hash}"
+        )
 
 
 def _try_lock(fd: int) -> bool:
@@ -221,15 +245,22 @@ def canonical_hash(obj: Any) -> str:
 
 
 def _link_hash(prev_hash: Any, receipt_id: Any, organ: Any, ts: Any,
-               chain_index: Any) -> str:
-    """The Khipu link hash documented in the module docstring."""
-    return canonical_hash({
+               chain_index: Any, receipt_body_hash: Any = None) -> str:
+    """The Khipu link hash documented in the module docstring.
+
+    ``receipt_body_hash`` is absent only for legacy v1 records. New v2 links
+    commit the complete submitted receipt, including non-identity fields.
+    """
+    link = {
         "prev_hash": prev_hash,
         "receipt_id": receipt_id,
         "organ": organ,
         "ts": ts,
         "chain_index": chain_index,
-    })
+    }
+    if receipt_body_hash is not None:
+        link["receipt_body_hash"] = receipt_body_hash
+    return canonical_hash(link)
 
 
 def normalize_organ(organ: Any) -> str:
@@ -308,11 +339,12 @@ def _partition_date(ts: str) -> str:
 class _OrganState:
     """In-memory mirror of one organ's VALIDATED on-disk chain."""
 
-    __slots__ = ("seen", "chain_index", "chain_head", "count", "files",
-                 "corruption")
+    __slots__ = ("seen", "receipt_body_hashes", "chain_index", "chain_head",
+                 "count", "files", "corruption")
 
     def __init__(self) -> None:
         self.seen: set[str] = set()
+        self.receipt_body_hashes: dict[str, str] = {}
         self.chain_index: int = 0
         self.chain_head: str | None = None
         self.count: int = 0
@@ -429,9 +461,11 @@ class ReceiptLedger:
         if not isinstance(env, dict):
             return "unparseable_line", "record is not a JSON object"
 
-        if env.get("schema") != SCHEMA:
+        schema = env.get("schema")
+        if schema not in SUPPORTED_SCHEMAS:
             return "malformed_envelope", (
-                f"schema must be {SCHEMA!r}, stored {_short(env.get('schema'))}")
+                f"schema must be one of {sorted(SUPPORTED_SCHEMAS)!r}, "
+                f"stored {_short(schema)}")
         if env.get("chain_alg") != CHAIN_HASH:
             return "malformed_envelope", (
                 f"chain_alg must be {CHAIN_HASH!r}, stored "
@@ -445,6 +479,7 @@ class ReceiptLedger:
         ci = env.get("chain_index")
         prev = env.get("prev_hash")
         stored_hash = env.get("chain_hash")
+        stored_body_hash = env.get("receipt_body_hash")
         if not isinstance(rid, str) or not rid:
             return "malformed_envelope", "receipt_id must be a non-empty string"
         if not isinstance(ts, str):
@@ -456,6 +491,12 @@ class ReceiptLedger:
             return "malformed_envelope", "prev_hash must be a string or null"
         if not isinstance(stored_hash, str):
             return "malformed_envelope", "chain_hash must be a string"
+        if schema == SCHEMA and (
+            not isinstance(stored_body_hash, str)
+            or re.fullmatch(r"[0-9a-f]{64}", stored_body_hash) is None
+        ):
+            return "malformed_envelope", (
+                "receipt_body_hash must be a 64-character lowercase hex string")
 
         expected = st.chain_index + 1
         if ci != expected:
@@ -463,7 +504,10 @@ class ReceiptLedger:
         if prev != st.chain_head:
             return "prev_hash_mismatch", (
                 f"expected {_short(st.chain_head)}, stored {_short(prev)}")
-        if _link_hash(prev, rid, organ, ts, ci) != stored_hash:
+        committed_body_hash = stored_body_hash if schema == SCHEMA else None
+        if _link_hash(
+            prev, rid, organ, ts, ci, committed_body_hash
+        ) != stored_hash:
             return "chain_hash_mismatch", "recomputed link hash != stored"
         receipt = env.get("receipt")
         if not isinstance(receipt, dict):
@@ -471,11 +515,16 @@ class ReceiptLedger:
                 "stored receipt body must be a JSON object")
         try:
             body_id = receipt_identity(receipt)
+            actual_body_hash = canonical_hash(receipt)
         except Exception:  # noqa: BLE001
             body_id = None
+            actual_body_hash = None
         if body_id != rid:
             return "receipt_id_mismatch", (
                 "stored receipt body no longer hashes to receipt_id")
+        if schema == SCHEMA and actual_body_hash != stored_body_hash:
+            return "receipt_body_hash_mismatch", (
+                "stored receipt body no longer hashes to receipt_body_hash")
         if rid in st.seen:
             return "duplicate_receipt_id", (
                 f"receipt_id {_short(rid)} already appears earlier in the chain")
@@ -487,6 +536,7 @@ class ReceiptLedger:
                 f"{checkpoint.chain_head}; replay has {stored_hash}")
 
         st.seen.add(rid)
+        st.receipt_body_hashes[rid] = actual_body_hash
         st.chain_index = ci
         st.chain_head = stored_hash
         st.count += 1
@@ -591,16 +641,18 @@ class ReceiptLedger:
     def append(self, receipt: dict) -> dict:
         """Append a single receipt. Idempotent on its id/hash.
 
-        Returns {accepted, duplicate, receipt_id, ledger_offset, chain_index,
-        chain_head, organ}. Raises LedgerCorruptionError (nothing written)
-        when the organ's persisted chain fails validation, and
-        LedgerLockTimeout when the writer lock is not acquired in time.
+        Returns {accepted, duplicate, receipt_id, receipt_body_hash,
+        ledger_offset, chain_index, chain_head, organ}. Raises
+        LedgerCorruptionError (nothing written) when the organ's persisted
+        chain fails validation, ReceiptIdentityConflict when an existing ID is
+        submitted with different bytes, and LedgerLockTimeout when the writer
+        lock is not acquired in time.
         """
         if not isinstance(receipt, dict):
             raise ValueError("receipt must be a JSON object")
         # Validate the whole body even when its identity is supplied or already
         # present. Acknowledging non-finite values would poison JSON read APIs.
-        canonical_json(receipt)
+        receipt_body_hash = canonical_hash(receipt)
         organ = normalize_organ(receipt.get("organ", "unknown"))
         rid = receipt_identity(receipt)
         ts = _receipt_ts(receipt)
@@ -612,10 +664,15 @@ class ReceiptLedger:
             self._raise_if_corrupt(st)
 
             if rid in st.seen:
+                stored_body_hash = st.receipt_body_hashes[rid]
+                if stored_body_hash != receipt_body_hash:
+                    raise ReceiptIdentityConflict(
+                        rid, stored_body_hash, receipt_body_hash)
                 return {
                     "accepted": False,
                     "duplicate": True,
                     "receipt_id": rid,
+                    "receipt_body_hash": receipt_body_hash,
                     "organ": organ,
                     "ledger_offset": st.count,
                     "chain_index": st.chain_index,
@@ -624,13 +681,15 @@ class ReceiptLedger:
 
             chain_index = st.chain_index + 1
             prev_hash = st.chain_head
-            chain_hash = _link_hash(prev_hash, rid, organ, ts, chain_index)
+            chain_hash = _link_hash(
+                prev_hash, rid, organ, ts, chain_index, receipt_body_hash)
 
             envelope = {
                 "schema": SCHEMA,
                 "chain_alg": CHAIN_HASH,
                 "organ": organ,
                 "receipt_id": rid,
+                "receipt_body_hash": receipt_body_hash,
                 "prev_hash": prev_hash,
                 "chain_hash": chain_hash,
                 "chain_index": chain_index,
@@ -657,6 +716,7 @@ class ReceiptLedger:
             offset, lineno = st.files.get(name, (0, 0))
             st.files[name] = [offset + len(data), lineno + 1]
             st.seen.add(rid)
+            st.receipt_body_hashes[rid] = receipt_body_hash
             st.chain_index = chain_index
             st.chain_head = chain_hash
             st.count += 1
@@ -665,6 +725,7 @@ class ReceiptLedger:
                 "accepted": True,
                 "duplicate": False,
                 "receipt_id": rid,
+                "receipt_body_hash": receipt_body_hash,
                 "organ": organ,
                 "ledger_offset": st.count,
                 "chain_index": chain_index,
@@ -773,21 +834,18 @@ class ReceiptLedger:
              ``chain_hash`` (``None`` only at genesis),
           3. the stored ``chain_hash`` EQUALS SHA3-256 recomputed over the
              canonical link object, so mutating any COMMITTED link field
-             (``prev_hash``/``receipt_id``/``organ``/``ts``/``chain_index``)
-             is detected, and
-          4. the stored receipt body is a JSON object, and the stored
+             (``prev_hash``/``receipt_id``/``receipt_body_hash``/``organ``/
+             ``ts``/``chain_index``) is detected, and
+          4. the stored receipt body is a JSON object, the stored
              ``receipt_id`` still EQUALS ``receipt_identity`` of that body,
-             which binds a content-addressed (id-less)
-             receipt's entire body to the chain and detects tampering of an
-             id-bearing receipt's identity field.
+             and v2 ``receipt_body_hash`` still equals SHA3-256 over the whole
+             canonical body. This binds non-identity fields as well as IDs.
 
-        HONEST SCOPE. This verifies hash-chain integrity + ordering. It does NOT
-        verify DSSE receipt signatures (a separate concern — see the cosign
-        verify path). For a receipt that supplies its OWN id, the chain commits
-        to that identity and ordering, not to every payload byte, so tampering a
-        NON-identity field of an id-bearing receipt is out of scope here (the
-        receipt's DSSE signature covers that). A content-addressed (id-less)
-        receipt IS bound in full by check (4).
+        HONEST SCOPE. This verifies hash-chain integrity + ordering and, for v2,
+        the exact submitted receipt body. It does NOT verify DSSE signatures,
+        signer trust, or authorization (separate concerns - see the cosign
+        verify path). Legacy v1 records retain their documented identity-only
+        scope when they carry an explicit ID.
 
         Reads authoritative on-disk state directly (never the in-memory cache),
         so it catches tampering done to the files behind a running process. It
@@ -830,6 +888,28 @@ class ReceiptLedger:
                             })
                             continue
 
+                        schema = env.get("schema")
+                        if schema not in SUPPORTED_SCHEMAS:
+                            broken.append({
+                                "position": pos,
+                                "kind": "malformed_envelope",
+                                "detail": "unsupported schema",
+                            })
+                        stored_body_hash = env.get("receipt_body_hash")
+                        if schema == SCHEMA and (
+                            not isinstance(stored_body_hash, str)
+                            or re.fullmatch(
+                                r"[0-9a-f]{64}", stored_body_hash
+                            ) is None
+                        ):
+                            broken.append({
+                                "position": pos,
+                                "kind": "malformed_envelope",
+                                "detail": (
+                                    "receipt_body_hash must be lowercase sha3_256"
+                                ),
+                            })
+
                         ci = env.get("chain_index")
                         if ci != pos:
                             broken.append({
@@ -848,9 +928,12 @@ class ReceiptLedger:
                             })
 
                         stored_hash = env.get("chain_hash")
+                        committed_body_hash = (
+                            stored_body_hash if schema == SCHEMA else None)
                         recomputed = _link_hash(
                             stored_prev, env.get("receipt_id"),
-                            env.get("organ"), env.get("ts"), ci)
+                            env.get("organ"), env.get("ts"), ci,
+                            committed_body_hash)
                         if recomputed != stored_hash:
                             broken.append({
                                 "position": pos,
@@ -868,14 +951,24 @@ class ReceiptLedger:
                         else:
                             try:
                                 rid = receipt_identity(receipt)
+                                actual_body_hash = canonical_hash(receipt)
                             except Exception:  # noqa: BLE001
                                 rid = None
+                                actual_body_hash = None
                             if rid != env.get("receipt_id"):
                                 broken.append({
                                     "position": pos,
                                     "kind": "receipt_id_mismatch",
                                     "detail": ("stored receipt body no longer "
                                                "hashes to receipt_id"),
+                                })
+                            if (schema == SCHEMA
+                                    and actual_body_hash != stored_body_hash):
+                                broken.append({
+                                    "position": pos,
+                                    "kind": "receipt_body_hash_mismatch",
+                                    "detail": ("stored receipt body no longer "
+                                               "hashes to receipt_body_hash"),
                                 })
 
                         expected_prev = stored_hash
