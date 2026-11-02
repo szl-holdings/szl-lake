@@ -71,6 +71,7 @@ import contextlib
 import errno
 import hashlib
 import json
+import math
 import os
 import re
 import threading
@@ -190,7 +191,24 @@ def _now_iso() -> str:
 def canonical_json(obj: Any) -> bytes:
     """Compact, sorted-key JSON bytes — the canonical form for hashing."""
     return json.dumps(obj, sort_keys=True, separators=(",", ":"),
-                      ensure_ascii=True).encode("utf-8")
+                      ensure_ascii=True, allow_nan=False).encode("utf-8")
+
+
+def _reject_json_constant(value: str) -> Any:
+    raise ValueError(f"non-finite JSON number: {value}")
+
+
+def _finite_json_float(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("JSON number exceeds the finite float range")
+    return number
+
+
+def strict_json_loads(data: str | bytes) -> Any:
+    """Reject non-JSON constants and finite-looking numbers that overflow."""
+    return json.loads(data, parse_constant=_reject_json_constant,
+                      parse_float=_finite_json_float)
 
 
 def _sha3_256(b: bytes) -> str:
@@ -399,7 +417,7 @@ class ReceiptLedger:
                checkpoint: _OrganState | None = None) -> tuple[str, str] | None:
         """Validate one persisted record against st; admit it or say why not."""
         try:
-            env = json.loads(body.decode("utf-8"))
+            env = strict_json_loads(body.decode("utf-8"))
         except (ValueError, RecursionError) as exc:
             return "unparseable_line", _short(str(exc), 120)
         if not isinstance(env, dict):
@@ -574,6 +592,9 @@ class ReceiptLedger:
         """
         if not isinstance(receipt, dict):
             raise ValueError("receipt must be a JSON object")
+        # Validate the whole body even when its identity is supplied or already
+        # present. Acknowledging non-finite values would poison JSON read APIs.
+        canonical_json(receipt)
         organ = normalize_organ(receipt.get("organ", "unknown"))
         rid = receipt_identity(receipt)
         ts = _receipt_ts(receipt)
@@ -621,7 +642,7 @@ class ReceiptLedger:
             if newest is not None and newest > name:
                 name = newest
             line = json.dumps(envelope, sort_keys=True,
-                              separators=(",", ":")) + "\n"
+                              separators=(",", ":"), allow_nan=False) + "\n"
             data = line.encode("utf-8")
             _append_durably(os.path.join(self._organ_dir(organ), name), data)
             # Only a confirmed durable write advances the observation. Keep
@@ -697,7 +718,7 @@ class ReceiptLedger:
                         if not raw.strip():
                             continue
                         try:
-                            env = json.loads(raw)
+                            env = strict_json_loads(raw)
                         except ValueError:
                             # Validated bytes no longer parse: rewritten in place.
                             raise LedgerCorruptionError(
@@ -787,8 +808,8 @@ class ReceiptLedger:
                             continue
                         pos += 1
                         try:
-                            env = json.loads(line)
-                        except json.JSONDecodeError:
+                            env = strict_json_loads(line)
+                        except (ValueError, RecursionError):
                             broken.append({
                                 "position": pos,
                                 "kind": "unparseable_line",
