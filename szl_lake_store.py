@@ -229,10 +229,20 @@ def _finite_json_float(value: str) -> float:
     return number
 
 
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON object key")
+        result[key] = value
+    return result
+
+
 def strict_json_loads(data: str | bytes) -> Any:
-    """Reject non-JSON constants and finite-looking numbers that overflow."""
+    """Reject ambiguous objects, non-JSON constants, and numeric overflow."""
     return json.loads(data, parse_constant=_reject_json_constant,
-                      parse_float=_finite_json_float)
+                      parse_float=_finite_json_float,
+                      object_pairs_hook=_unique_json_object)
 
 
 def _sha3_256(b: bytes) -> str:
