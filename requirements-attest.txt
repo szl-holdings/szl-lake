@@ -1,7 +1,8 @@
 # Optional PCGI-spine attestation extra for szl-lake.
 #
-# The core ledger (szl_lake_store / szl_lake_server / szl_lake_client) is
-# stdlib-only and imposes NO dependency on callers. This file pins the ONLY
+# The core ledger (szl_lake_store / szl_lake_client / szl_lake_query) is
+# stdlib-only and imposes NO dependency on callers; szl_lake_server needs the
+# serve extra (pyproject.toml). This file pins the ONLY
 # optional dependency needed to fold a lake object onto the org-canonical
 # receipt spine via szl_lake_receipt.emit_lake_receipt(...). Pinned exactly to
 # the currently published canonical library release (v0.3.1).

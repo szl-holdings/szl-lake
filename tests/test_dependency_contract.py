@@ -37,12 +37,13 @@ def _dist_name(requirement: str) -> str:
     return re.sub(r"[-_.]+", "-", match.group(1)).lower()
 
 
-def _top_level(node: ast.AST) -> str | None:
-    if isinstance(node, ast.Import) and node.names:
-        return node.names[0].name.split(".")[0]
+def _top_level(node: ast.AST) -> list[str]:
+    """Top-level module names an import loads: every alias of ``import a, b``."""
+    if isinstance(node, ast.Import):
+        return [alias.name.split(".")[0] for alias in node.names]
     if isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-        return node.module.split(".")[0]
-    return None
+        return [node.module.split(".")[0]]
+    return []
 
 
 def server_imports(source: str) -> list[tuple[str, int]]:
@@ -50,9 +51,9 @@ def server_imports(source: str) -> list[tuple[str, int]]:
     found: list[tuple[str, int]] = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            name = _top_level(node)
-            if name and name != "__future__":
-                found.append((name, node.lineno))
+            for name in _top_level(node):
+                if name != "__future__":
+                    found.append((name, node.lineno))
     return found
 
 
@@ -126,6 +127,14 @@ def test_negative_control_dropped_extra_fails():
 
 def test_negative_control_planted_import_fails():
     source = SERVER.read_text(encoding="utf-8") + "\nimport requests\n"
+    pyproject = PYPROJECT.read_text(encoding="utf-8")
+    problems = contract_problems(source, pyproject)
+    assert any("requests" in problem for problem in problems)
+
+
+def test_negative_control_planted_import_after_a_stdlib_name_fails():
+    # `import json, requests` must not hide the second name.
+    source = SERVER.read_text(encoding="utf-8") + "\nimport json, requests\n"
     pyproject = PYPROJECT.read_text(encoding="utf-8")
     problems = contract_problems(source, pyproject)
     assert any("requests" in problem for problem in problems)
