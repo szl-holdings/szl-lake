@@ -138,7 +138,7 @@ a deployed server or production receipt ingestion.
 
 | Method · Path | Purpose |
 |---|---|
-| `POST /api/lake/v1/receipts` | Ingest one receipt (JSON object), a JSON array, or an **NDJSON batch** (`Content-Type: application/x-ndjson`). Idempotent on receipt `id`/`hash`. Returns `{accepted, ledger_offset, chain_head, chain_index, receipt_id}` (batch returns per-receipt results). |
+| `POST /api/lake/v1/receipts` | Ingest one receipt (JSON object), a JSON array, or an **NDJSON batch** (`Content-Type: application/x-ndjson`). Idempotent only when both receipt `id`/`hash` and the complete canonical body match. Reusing an ID for different bytes returns HTTP 400 and does not write that conflicting receipt. Batches retain their existing per-receipt, non-atomic behavior. Returns `{accepted, ledger_offset, chain_head, chain_index, receipt_id, receipt_body_hash}` (batch returns per-receipt results). |
 | `GET /api/lake/v1/receipts?organ=&since=&limit=` | Real query over the store, newest-first. `since` is an ISO timestamp. Returns only each organ's validated chain; a corrupted organ answers **503** `ledger_corrupted` instead of silently skipping bad records. |
 | `GET /api/lake/v1/chain/head?organ=` | Current Khipu chain head + count for an organ (for cross-component verification). |
 | `GET /api/lake/v1/chain/verify?organ=` | Re-derive an organ's Khipu chain straight from disk and report tamper-evidence: `{ok, count, chain_head, chain_index, broken:[…]}`. Detects invalid committed fields, broken links/indices, insertion, and re-ordering. A self-consistent shortened or rehashed chain needs a trusted prior head to establish historical rollback. Returns HTTP 200 even when `ok` is `false` (a detected break is a valid result, not a request error). |
@@ -179,8 +179,10 @@ This is an in-memory observation, not durable anti-rollback.
 Restart and `reload()` forget prior observations;
 independent `verify_chain()` can report `ok=true` for a self-consistent
 shortened or rewritten chain even while this warmed instance refuses it.
-Signature validation and non-identity fields of id-bearing receipt bodies
-remain outside this chain check. Direct reads of a remembered removed organ
+Signature validation, signer trust, and authorization remain outside this
+chain check. New v2 envelopes bind the complete submitted receipt through
+`receipt_body_hash`; legacy v1 records with explicit IDs retain their original
+identity-only scope. Direct reads of a remembered removed organ
 preserve its observation/corruption; `health()` still lists only directories
 currently on disk. HTTP event-loop lock responsiveness is unchanged.
 
@@ -221,11 +223,19 @@ chain, formulas **F4 / F22**):
 chain_hash = SHA3-256( canonical_json({
     "prev_hash":   <prev chain_hash, or null at genesis>,
     "receipt_id":  <receipt id/hash, or content hash if id-less>,
+    "receipt_body_hash": <SHA3-256 over the complete submitted receipt>,
     "organ":       <organ>,
     "ts":          <receipt timestamp>,
     "chain_index": <1-based position in this organ's chain>,
 }) )
 ```
+
+Writers emit `szl.lake.receipt/v2`. Readers also accept existing
+`szl.lake.receipt/v1` records and can extend a v1 chain with v2 records. The v2
+body hash is returned by append and preserved by query, giving callers an exact
+append/readback comparison value independent of the receipt's own ID. A replay
+refuses a changed body, and a duplicate ID with a different body raises a typed
+`ReceiptIdentityConflict` before any write.
 
 `chain_index` is strictly monotonic per organ; `GET /chain/head` returns the
 latest `chain_hash` so any component can fetch and compare it for tamper-evident

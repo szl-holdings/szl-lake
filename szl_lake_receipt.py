@@ -7,7 +7,7 @@ szl-lake durably stores governance receipts (szl_lake_store.ReceiptLedger) and
 anchors signed proof snapshots (scripts/verify_lutar_lean_receipts.py). Those
 paths each carry their OWN provenance (the SHA3-256 Khipu chain, the cosign
 attestation bundle). This module binds a lake object to the ONE org-canonical
-receipt shape by DELEGATING to the shared ``szl_receipt`` library (v0.2.0) — it
+receipt shape by DELEGATING to the shared ``szl_receipt`` library (v0.3.1) - it
 does NOT re-implement receipt digests, canonicalization, DSSE signing, or the
 in-toto statement. It is the same fold ``yarqa`` and ``governed-inference-meter``
 already landed on the spine.
@@ -37,7 +37,8 @@ Honesty (doctrine v11)
 * Keyless => UNSIGNED-honest (``signed=False``); a signature is never faked.
 * The canonical body is deterministic (no timestamp / nonce): identical inputs
   serialize to byte-identical canonical JSON and the same digest.
-* ``szl_receipt`` is an OPTIONAL dependency (pinned ``szl-receipt==0.2.0`` — see
+* ``szl_receipt`` is an OPTIONAL dependency (pinned
+  ``szl-receipt-dsse==0.3.1`` - see
   ``requirements-attest.txt``). Importing this module never requires it; only
   producing a canonical receipt does. When absent this raises
   :class:`LakeReceiptUnavailable` rather than fabricating a receipt — the
@@ -71,8 +72,8 @@ def _require_szl_receipt():
         from szl_receipt import attest  # type: ignore
     except Exception as exc:  # pragma: no cover - exercised only without the lib
         raise LakeReceiptUnavailable(
-            "szl_receipt (v0.2.0) is not installed; install "
-            "`szl-receipt==0.2.0` (see requirements-attest.txt) to fold "
+            "szl_receipt (v0.3.1) is not installed; install "
+            "`szl-receipt-dsse==0.3.1` (see requirements-attest.txt) to fold "
             "szl-lake objects onto the canonical receipt spine. Refusing to "
             "duplicate the shared receipt shapes."
         ) from exc
@@ -295,7 +296,7 @@ def verify_lake_receipt(
     anchor_id: Any = None,
     input: Any = None,
     stored_object: Any = None,
-    policy_id: str = DEFAULT_POLICY_ID,
+    policy_id: Optional[str] = None,
     input_digest: Optional[str] = None,
     stored_object_digest: Optional[str] = None,
 ) -> tuple[bool, str]:
@@ -303,9 +304,12 @@ def verify_lake_receipt(
 
     Delegates the cryptographic check to :func:`szl_receipt.verify_receipt`
     (keyless envelopes honestly return ``(False, "unsigned-honest")``). When any
-    rebind argument is supplied, additionally confirms the signed body's
-    ``input_digest`` / ``stored_object_digest`` re-derive from the object held
-    independently — so any post-hoc edit flips a digest and fails the rebind.
+    subject or digest rebind argument is supplied, additionally confirms the
+    signed body's subject matches the requested ``anchor_id`` and its supplied
+    ``input_digest`` / ``stored_object_digest`` bindings re-derive from the
+    object held independently. An explicit ``policy_id`` constrains the signed
+    policy, including when supplied alone. Omitting it leaves policy
+    unconstrained; passing ``DEFAULT_POLICY_ID`` requires that exact policy.
     """
     szl_receipt, _ = _require_szl_receipt()
     ok, detail = szl_receipt.verify_receipt(envelope, public_key_pem)
@@ -314,7 +318,7 @@ def verify_lake_receipt(
 
     rebind = any(
         x is not None
-        for x in (input, stored_object, input_digest, stored_object_digest)
+        for x in (anchor_id, policy_id, input, stored_object, input_digest, stored_object_digest)
     )
     if not rebind:
         return True, "ok"
@@ -326,6 +330,9 @@ def verify_lake_receipt(
         body = json.loads(base64.b64decode(envelope["payload"]).decode("utf-8"))
     except Exception as exc:  # noqa: BLE001
         return False, f"payload decode error: {exc}"
+
+    if not isinstance(body, dict):
+        return False, "payload-not-object"
 
     if input is not None or input_digest is not None:
         exp_idig = (
@@ -347,5 +354,10 @@ def verify_lake_receipt(
 
     if anchor_id is not None and body.get("subject") != str(anchor_id):
         return False, "subject-rebind-mismatch"
+
+    if policy_id is not None:
+        policy = body.get("policy")
+        if not isinstance(policy, dict) or policy.get("id") != str(policy_id):
+            return False, "policy-rebind-mismatch"
 
     return True, "ok"
