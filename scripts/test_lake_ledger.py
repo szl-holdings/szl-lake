@@ -33,6 +33,7 @@ if REPO not in sys.path:
     sys.path.insert(0, REPO)
 
 from szl_lake_store import (  # noqa: E402
+    ReceiptIdentityConflict,
     ReceiptLedger,
     canonical_hash,
 )
@@ -117,8 +118,9 @@ def test_append_accepts_and_returns_chain_head(ledger):
 
 
 def test_idempotent_on_duplicate_id(ledger):
-    first = ledger.append(make_receipt("dup"))
-    second = ledger.append(make_receipt("dup", decision="REJECT"))
+    receipt = make_receipt("dup")
+    first = ledger.append(receipt)
+    second = ledger.append(dict(receipt))
     assert first["accepted"] is True
     assert second["accepted"] is False
     assert second["duplicate"] is True
@@ -127,6 +129,10 @@ def test_idempotent_on_duplicate_id(ledger):
     assert second["chain_index"] == first["chain_index"]
     head = ledger.chain_head("a11oy")
     assert head["count"] == 1
+    # v2: the same id submitted with DIFFERENT bytes is a fail-closed
+    # identity conflict, never a silent duplicate.
+    with pytest.raises(ReceiptIdentityConflict):
+        ledger.append(make_receipt("dup", decision="REJECT"))
 
 
 def test_chain_linkage_and_recompute(ledger):
@@ -141,15 +147,20 @@ def test_chain_linkage_and_recompute(ledger):
     # each prev_hash links to the prior chain_hash
     assert envs[1]["prev_hash"] == envs[0]["chain_hash"]
     assert envs[2]["prev_hash"] == envs[1]["chain_hash"]
-    # chain_hash is the documented SHA3-256 over the canonical link object
+    # chain_hash is the documented SHA3-256 over the canonical link object.
+    # v2 links additionally commit receipt_body_hash (the full receipt body)
+    # when present; legacy v1 records omit it.
     for e in envs:
-        recomputed = canonical_hash({
+        link = {
             "prev_hash": e["prev_hash"],
             "receipt_id": e["receipt_id"],
             "organ": e["organ"],
             "ts": e["ts"],
             "chain_index": e["chain_index"],
-        })
+        }
+        if e.get("receipt_body_hash") is not None:
+            link["receipt_body_hash"] = e["receipt_body_hash"]
+        recomputed = canonical_hash(link)
         assert recomputed == e["chain_hash"]
 
 
@@ -471,17 +482,19 @@ def test_verify_detects_idless_body_tamper(ledger):
 
 
 def test_verify_honest_scope_idbearing_nonid_field(ledger):
-    # HONEST SCOPE: for a receipt that supplies its OWN id, the chain commits to
-    # identity + ordering, not to every payload byte — so editing a NON-identity
-    # field is out of scope for chain verification (the receipt's DSSE signature
-    # covers that). This test documents the boundary so it is never overclaimed.
+    # HONEST SCOPE (v2): since the v2 link upgrade the chain commits to the
+    # complete receipt body via receipt_body_hash, not just identity +
+    # ordering. Editing a NON-identity field now IS detectable by chain
+    # verification, so the old v1 boundary ("not detectable via the hash-chain
+    # alone") no longer holds. This test pins the stronger v2 guarantee so it
+    # is never silently weakened back to v1.
     ledger.append(make_receipt("sc1", decision="ADMIT"))
     envs = _read_envelopes(ledger.root, "a11oy")
     envs[0]["receipt"]["decision"] = "REJECT"  # non-identity field, id unchanged
     _rewrite_envelopes(ledger.root, "a11oy", envs)
     ledger.reload()
     rep = ledger.verify_chain("a11oy")
-    assert rep["ok"] is True  # not detectable via the hash-chain alone
+    assert rep["ok"] is False  # v2: body edits break the chain link
 
 
 def test_verify_reads_disk_not_cache(ledger):
