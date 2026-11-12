@@ -28,6 +28,15 @@ configs:
         path: khipu/*_receipts.parquet
 ---
 
+<!-- SZL-ESTATE-CARD:v2:START -->
+<p align="center"><a href="https://a-11-oy.com/"><img src="https://huggingface.co/spaces/SZLHOLDINGS/README/resolve/main/assets/estate-banner-v2.svg" alt="SZL Holdings — governed, receipted, verifiable" width="100%"></a></p>
+
+**Control before action. Evidence after.**
+
+[Product](https://a-11-oy.com) · [Proof](https://a11oy.net) · [GitHub](https://github.com/szl-holdings) · [HF org](https://huggingface.co/SZLHOLDINGS)
+<!-- SZL-ESTATE-CARD:v2:END -->
+
+
 <p><a href="https://huggingface.co/spaces/SZLHOLDINGS/szl-command-lab"><img src="https://raw.githubusercontent.com/szl-holdings/szl-brand/27d12e77fc0f9f1a0e5fae8b34adf2380d51d070/kit/logos/orbit-v2/suite/szl-icon-32.svg" alt="SZL Holdings" width="40" height="40" /></a></p>
 
 # SZL Evidence Lake
