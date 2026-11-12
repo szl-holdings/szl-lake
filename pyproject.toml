@@ -13,7 +13,7 @@ authors = [{ name = "SZL Holdings" }]
 
 [project.optional-dependencies]
 serve = [
-  "fastapi>=0.110",
+  "fastapi>=0.110.1",
   "uvicorn>=0.27",
 ]
 

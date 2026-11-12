@@ -1,0 +1,44 @@
+name: Serve extra floors
+
+# Installs the serve extra at exactly its declared floors (the fastapi and
+# uvicorn lower bounds in pyproject.toml; everything else resolved normally),
+# then runs the same suite and installed-server check as installed-server-ci.
+# A floor that no longer installs or passes fails here, not in a user install.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+jobs:
+  floors:
+    name: Serve extra at its declared floors (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install the serve extra at its declared floors
+        run: |
+          python scripts/serve_floors.py constraints > "$RUNNER_TEMP/serve-floors.txt"
+          cat "$RUNNER_TEMP/serve-floors.txt"
+          python -m pip install ".[serve]" pytest httpx -c "$RUNNER_TEMP/serve-floors.txt"
+          python -m pip check
+          python scripts/serve_floors.py verify
+      - name: Exercise the existing suite at the floors
+        run: python -m pytest -q tests
+      - name: Verify the installed server at the floors outside the checkout
+        working-directory: ${{ runner.temp }}
+        run: python -I "$GITHUB_WORKSPACE/scripts/check_installed_server.py"
