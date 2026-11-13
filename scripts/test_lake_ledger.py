@@ -613,5 +613,69 @@ def test_finite_values_and_strings_still_round_trip(client):
     assert ledger.verify_chain("audit")["ok"] is True
 
 
+
+def test_client_validates_real_server_acknowledgments(client, monkeypatch):
+    """Exercise real serialization, HTTP handlers, ledger and acknowledgment."""
+    import io
+    from types import SimpleNamespace
+    c, led = client
+    calls = []
+
+    def post(request, timeout):
+        calls.append(request.data)
+        response = c.post(request.full_url, content=request.data, headers=dict(request.header_items()))
+        stream = io.BytesIO(response.content)
+        stream.status = response.status_code
+        stream.headers = response.headers
+        return stream
+
+    monkeypatch.setattr(szl_lake_client.urllib.request, "build_opener",
+                        lambda *_handlers: SimpleNamespace(open=post))
+    receipt = {"organ": " Test ", "value": "λ", "nested": {1: "normalized on wire"}}
+    first = szl_lake_client.emit_receipt(receipt, base_url="http://testserver")
+    duplicate = szl_lake_client.emit_receipt(receipt, base_url="http://testserver")
+    singleton = szl_lake_client.emit_batch([receipt], base_url="http://testserver")
+    batch = szl_lake_client.emit_batch([receipt, make_receipt("new", organ="test")],
+                                     base_url="http://testserver")
+    for result in (first, duplicate, singleton, batch):
+        assert result["ok"] is True, result
+        assert result["delivery_state"] == "SINK_ACKNOWLEDGED"
+        assert result["signature_verified"] is False
+        assert result["durability_verified"] is False
+    assert first["response"]["accepted"] is True
+    assert duplicate["response"]["duplicate"] is True
+    assert batch["response"]["accepted"] == 1
+    assert batch["response"]["duplicates"] == 1
+    assert len(calls) == 4
+    assert led.chain_head("test")["count"] == 2
+
+
+def test_client_failed_batch_keeps_delivery_unknown_without_retry(client, monkeypatch):
+    import io
+    from types import SimpleNamespace
+    c, led = client
+    calls = []
+
+    def post(request, timeout):
+        calls.append(request.data)
+        response = c.post(request.full_url, content=request.data, headers=dict(request.header_items()))
+        stream = io.BytesIO(response.content)
+        stream.status = response.status_code
+        stream.headers = response.headers
+        return stream
+
+    monkeypatch.setattr(szl_lake_client.urllib.request, "build_opener",
+                        lambda *_handlers: SimpleNamespace(open=post))
+    result = szl_lake_client.emit_batch(
+        [make_receipt("stored", organ="test"), make_receipt("bad", organ="../escape")],
+        base_url="http://testserver")
+    assert result["ok"] is False
+    assert result["delivery_state"] == "UNKNOWN"
+    assert result["status"] == 400
+    assert len(calls) == 1
+    # The first receipt really committed before the later rejection. Reporting
+    # NOT_SENT, zero writes or retrying the whole batch blindly would be false.
+    assert led.chain_head("test")["count"] == 1
+
 if __name__ == "__main__":
     sys.exit(pytest.main([os.path.abspath(__file__), "-q"]))
