@@ -38,7 +38,14 @@ def _endpoint(base_url: str) -> str:
     parsed = urllib.parse.urlsplit(base_url)
     if parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment:
         raise ValueError("receipt sink must not contain credentials, query or fragment")
-    return base_url.rstrip("/") + RECEIPTS_PATH
+    path = parsed.path.rstrip("/")
+    if path.endswith(RECEIPTS_PATH):
+        endpoint_path = path
+    elif path.endswith("/api/lake/v1"):
+        endpoint_path = path + "/receipts"
+    else:
+        endpoint_path = path + RECEIPTS_PATH
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, endpoint_path, "", ""))
 
 
 def _unique_object(pairs):
@@ -79,6 +86,8 @@ def _acknowledges(row, receipt):
         return False
     accepted, duplicate = row.get("accepted"), row.get("duplicate")
     if type(accepted) is not bool or type(duplicate) is not bool or accepted == duplicate:
+        return False
+    if "state" in row and row["state"] != ("LOCAL_ACKNOWLEDGED" if accepted else "LOCAL_DUPLICATE"):
         return False
     body_hash = _body_hash(receipt)
     identity = next((receipt[key] for key in ("id", "hash", "receipt_id")

@@ -63,6 +63,13 @@ class AcknowledgmentTests(unittest.TestCase):
     def test_wrong_body_hash_is_refused(self):
         self.assertIs(self.emit({**acknowledgment(), "receipt_body_hash": "b" * 64})["ok"], False)
 
+    def test_explicit_unknown_state_cannot_override_receipt_failure(self):
+        for state in ("UNKNOWN", "REJECTED", "LOCAL_DUPLICATE", None):
+            with self.subTest(state=state):
+                self.assertIs(self.emit({**acknowledgment(), "state": state})["ok"], False)
+        self.assertIs(self.emit({**acknowledgment(), "state": "LOCAL_ACKNOWLEDGED"})["ok"], True)
+        self.assertIs(self.emit({**acknowledgment(duplicate=True), "state": "LOCAL_DUPLICATE"})["ok"], True)
+
     def test_wrong_organ_is_refused(self):
         self.assertIs(self.emit({**acknowledgment(), "organ": "other"})["ok"], False)
 
@@ -181,6 +188,30 @@ class TransportBoundaryTests(unittest.TestCase):
         self.assertIs(result["ok"], False)
         self.assertEqual(result["delivery_state"], "UNKNOWN")
         builder.return_value.open.assert_called_once()
+
+
+class EndpointFormsTests(unittest.TestCase):
+    def test_origin_is_completed_once(self):
+        for base in ('https://example.invalid', 'https://example.invalid/'):
+            with self.subTest(base=base):
+                self.assertEqual(client._endpoint(base), 'https://example.invalid/api/lake/v1/receipts')
+
+    def test_documented_api_base_is_not_duplicated(self):
+        for base in ('https://example.invalid/api/lake/v1', 'https://example.invalid/api/lake/v1/'):
+            with self.subTest(base=base):
+                self.assertEqual(client._endpoint(base), 'https://example.invalid/api/lake/v1/receipts')
+
+    def test_exact_ingest_url_is_not_duplicated(self):
+        for base in ('https://example.invalid/api/lake/v1/receipts', 'https://example.invalid/api/lake/v1/receipts/'):
+            with self.subTest(base=base):
+                self.assertEqual(client._endpoint(base), 'https://example.invalid/api/lake/v1/receipts')
+
+    def test_reverse_proxy_prefix_is_preserved(self):
+        for path in ('/proxy', '/proxy/api/lake/v1', '/proxy/api/lake/v1/receipts'):
+            with self.subTest(path=path):
+                self.assertEqual(client._endpoint('https://example.invalid'+path),
+                                 'https://example.invalid/proxy/api/lake/v1/receipts')
+
 
 if __name__ == "__main__":
     unittest.main()

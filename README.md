@@ -213,6 +213,11 @@ if not result["ok"]:
     logging.warning("Receipt delivery %s: %s", result["delivery_state"], result["reason"])
 ```
 
+The sink accepts an origin, the `/api/lake/v1` API base documented by A11oy,
+or the complete `/api/lake/v1/receipts` URL. The receipt path is added once;
+a configured reverse-proxy prefix is retained. Credentials in the URL,
+query strings and fragments are refused; redirects are not followed.
+
 `emit_receipt` and `emit_batch` return `ok=True` only for a native JSON
 acknowledgment bound to every serialized receipt's identity, canonical SHA3-256
 body digest and organ, with valid chain metadata and consistent batch totals.

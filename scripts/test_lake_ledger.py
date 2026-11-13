@@ -634,9 +634,9 @@ def test_client_validates_real_server_acknowledgments(client, monkeypatch):
     receipt = {"organ": " Test ", "value": "λ", "nested": {1: "normalized on wire"}}
     first = szl_lake_client.emit_receipt(receipt, base_url="http://testserver")
     duplicate = szl_lake_client.emit_receipt(receipt, base_url="http://testserver")
-    singleton = szl_lake_client.emit_batch([receipt], base_url="http://testserver")
+    singleton = szl_lake_client.emit_batch([receipt], base_url="http://testserver/api/lake/v1")
     batch = szl_lake_client.emit_batch([receipt, make_receipt("new", organ="test")],
-                                     base_url="http://testserver")
+                                     base_url="http://testserver/api/lake/v1/receipts")
     for result in (first, duplicate, singleton, batch):
         assert result["ok"] is True, result
         assert result["delivery_state"] == "SINK_ACKNOWLEDGED"
