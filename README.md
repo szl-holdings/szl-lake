@@ -114,7 +114,7 @@ and `szl_lake_query.py` returned a stub. This is the real ingest + query path.
 |---|---|
 | `szl_lake_store.py` | Durable, append-only, hash-chained NDJSON store (`ReceiptLedger`). Restart-safe — all state is rebuilt from disk, never an in-memory map that resets, and every record is re-validated (index, prev-hash link, recomputed hash, body identity) before an append is admitted. A corrupted organ chain fails closed: appends are refused with `LedgerCorruptionError` naming the first bad line, and the corrupt bytes are left untouched. Writers sharing one store root serialize on a per-organ OS lock file (`<organ>/.writer.lock`). |
 | `szl_lake_server.py` | FastAPI service exposing the ingest + query API. |
-| `szl_lake_client.py` | Fire-and-forget `emit_receipt(...)` helper for callers. |
+| `szl_lake_client.py` | Best-effort synchronous emitter with receipt-bound sink acknowledgments; callers must inspect the result. |
 | `szl_lake_query.py` | `query_receipts(...)` now reads the real store (stub path replaced for receipts; `LakeQuery` kept importable for back-compat). |
 
 **Run it**
@@ -205,14 +205,44 @@ export SZL_RECEIPT_SINK=https://<deployed-lake-host>
 ```
 
 ```python
+import logging
 from szl_lake_client import emit_receipt
-emit_receipt(my_receipt)   # returns immediately, never raises
+result = emit_receipt(my_receipt)  # synchronous, best effort; never raises
+if not result["ok"]:
+    # The caller owns its refusal/outbox policy. Do not claim receipt delivery.
+    logging.warning("Receipt delivery %s: %s", result["delivery_state"], result["reason"])
 ```
 
-`emit_receipt` is **non-blocking and never raises** — a slow or down sink must
-never take down a caller's governed action. If `SZL_RECEIPT_SINK` is unset it is
-a safe no-op. `emit_batch(...)` POSTs an NDJSON batch the same way. Timeout
-defaults to `1.5s` (override with `$SZL_RECEIPT_TIMEOUT`).
+The sink accepts an origin, the `/api/lake/v1` API base documented by A11oy,
+or the complete `/api/lake/v1/receipts` URL. The receipt path is added once;
+a configured reverse-proxy prefix is retained. Credentials in the URL,
+query strings and fragments are refused; redirects are not followed.
+
+`emit_receipt` and `emit_batch` return `ok=True` only for a native JSON
+acknowledgment bound to every serialized receipt's identity, canonical SHA3-256
+body digest and organ, with valid chain metadata and consistent batch totals.
+One-item NDJSON uses the server's single-receipt envelope. Duplicates are
+acknowledged only for the same identity/body. HTTP 200, HTML/login pages,
+malformed or oversized JSON, and partial/mismatched batches are not success.
+
+`delivery_state` is `NOT_CONFIGURED` when the sink is absent, `NOT_SENT` for
+invalid local input, `UNKNOWN` after a failed or ambiguous attempt, and
+`SINK_ACKNOWLEDGED` only after the contract passes. A timeout or HTTP rejection
+can follow a partial batch write; `UNKNOWN` does not mean zero writes. There
+is no automatic retry, background worker, durable queue or redirect following.
+
+The call is **synchronous**, not non-blocking. The socket-operation timeout
+defaults to `1.5s` (override with `$SZL_RECEIPT_TIMEOUT` or the argument); it is
+not a total wall-clock deadline. Responses are bounded to 1 MiB. Invalid,
+non-positive or non-finite timeout configuration fails before transport and
+cannot prevent importing the module.
+
+`signature_verified` and `durability_verified` remain `False`: a bound server
+acknowledgment is not independent signature, chain-history or disk verification.
+This client is best-effort delivery, not execution admission. Callers requiring
+receipt-on-write must enforce their own admitted refusal/outbox policy; ignoring
+the result does not establish receipt coverage. No sink, credential or caller
+configuration is installed by importing this module.
 
 ### Hash-chain semantics
 
