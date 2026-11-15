@@ -186,3 +186,11 @@ Honesty (Doctrine v11): Λ unconditional uniqueness is **Conjecture 1** (machine
 
 
 Artwork: SZL Orbit · © 2026 SZL Holdings / Stephen Lutar · [CC BY 4.0](https://github.com/szl-holdings/szl-brand/blob/27d12e77fc0f9f1a0e5fae8b34adf2380d51d070/kit/LICENSE).
+
+## Card completeness (2026-11-12)
+
+This section adds required card sections the card above did not have. It states only what files in this repository and the estate's own receipt datasets show; nothing here is a new result.
+
+### Provenance
+
+- See `DATASET_PROVENANCE.json` in this repository for the full attestation.
