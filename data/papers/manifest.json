@@ -1,21 +1,21 @@
 {
   "schema": "szl.lake.papers/v1",
   "generated_at_utc": "2026-06-02T02:14:39Z",
-  "concept_doi": "10.5281/zenodo.19944926",
+  "concept_doi": "10.5281/zenodo.24239896",
   "umbrella_doi": "10.5281/zenodo.20434276",
   "note": "DOIs verified from szl-holdings repo CITATION.cff / .zenodo.json and org README. PDFs are NOT duplicated here \u2014 cite Zenodo directly.",
   "papers": [
     {
       "title": "lutar-lean \u2014 Lean 4 + Mathlib formalization of the \u039b aggregator (749/14/163)",
-      "doi": "10.5281/zenodo.19944926",
+      "doi": "10.5281/zenodo.24239896",
       "relation": "concept",
-      "url": "https://doi.org/10.5281/zenodo.19944926"
+      "url": "https://doi.org/10.5281/zenodo.24239896"
     },
     {
       "title": "lutar-lean kernel release",
-      "doi": "10.5281/zenodo.20434308",
+      "doi": "10.5281/zenodo.24239654",
       "relation": "version",
-      "url": "https://doi.org/10.5281/zenodo.20434308"
+      "url": "https://doi.org/10.5281/zenodo.24239654"
     },
     {
       "title": "SZL governance substrate (umbrella deposit)",

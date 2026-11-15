@@ -55,7 +55,7 @@ METADATA = {
     "name": "SZL Holdings Data Lake",
     "doctrine": "v11 LOCKED 749/14/163",
     "lambda": "Conjecture 1 (open)",
-    "concept_doi": "10.5281/zenodo.19944926",
+    "concept_doi": "10.5281/zenodo.24239896",
     "umbrella_doi": "10.5281/zenodo.20434276",
     "license": "CC-BY-4.0",
 }
