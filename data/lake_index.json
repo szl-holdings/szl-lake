@@ -9,7 +9,7 @@
     "self_reference": "EXCLUDED_TO_AVOID_HASH_FIXED_POINT"
   },
   "doctrine": "v11 LOCKED 749/14/163",
-  "entries_sha256": "9e83c2a7302b8a4cef955f3a4e3c0592488e40604318079ca974cc410250a439",
+  "entries_sha256": "4576fb4bfe6c2286f846529499b8d4257a580587bcc2864c840de9b450189c19",
   "files": [
     {
       "bytes": 18657,
@@ -19,7 +19,7 @@
     {
       "bytes": 10114,
       "path": "README.md",
-      "sha256": "1aba31a76a15e51090c905c7c131868d5d52f7a0da6fef7ec306586e19bee777"
+      "sha256": "0ac7f73cec9de7196da4fb4901b8809d404221336331ca28e2b32aa8eaf537ed"
     },
     {
       "bytes": 1850,
@@ -94,7 +94,7 @@
     {
       "bytes": 2032,
       "path": "papers/manifest.json",
-      "sha256": "90580a6f42bf37dd47b0c3c6425103fc63a687368c90eafa3f639e1aab12403e"
+      "sha256": "35e7131a4b825628f90987b9f298948ec37bf667644245d7219e33dc1d72ce73"
     },
     {
       "bytes": 1685,
