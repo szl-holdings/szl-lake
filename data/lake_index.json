@@ -9,7 +9,7 @@
     "self_reference": "EXCLUDED_TO_AVOID_HASH_FIXED_POINT"
   },
   "doctrine": "v11 LOCKED 749/14/163",
-  "entries_sha256": "dda629e07035760bc4e56651d7547f0b0579b857e80c89e847c2731754d95e72",
+  "entries_sha256": "9e83c2a7302b8a4cef955f3a4e3c0592488e40604318079ca974cc410250a439",
   "files": [
     {
       "bytes": 18657,
@@ -17,9 +17,9 @@
       "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411"
     },
     {
-      "bytes": 9795,
+      "bytes": 10114,
       "path": "README.md",
-      "sha256": "96975c416ebf6d9d2ede41a813aca3ea0881d4e16b4eb04b5d8eae2e42cce786"
+      "sha256": "1aba31a76a15e51090c905c7c131868d5d52f7a0da6fef7ec306586e19bee777"
     },
     {
       "bytes": 1850,
@@ -1812,7 +1812,7 @@
       "sha256": "9bf9c8e2de3f92fb24225a7941b4bf3beec9529c457c57054110b3138076cc5b"
     }
   ],
-  "indexed_bytes": 2712616,
+  "indexed_bytes": 2712935,
   "indexed_file_count": 360,
   "lambda": "Conjecture 1 (open)",
   "license": "CC-BY-4.0",
