@@ -41,7 +41,7 @@ jobs:
       - name: Install exact publication client
         run: >-
           python -m pip install --disable-pip-version-check
-          "pyarrow>=16,<22" "huggingface_hub==2.0.0"
+          "pyarrow>=16,<24" "huggingface_hub==2.0.0"
       - name: Test the publication contract offline
         env:
           PYTHONPATH: scripts
@@ -71,7 +71,7 @@ jobs:
       - name: Install exact publication client
         run: >-
           python -m pip install --disable-pip-version-check
-          "pyarrow>=16,<22" "huggingface_hub==2.0.0"
+          "pyarrow>=16,<24" "huggingface_hub==2.0.0"
       - name: Require Hugging Face write credential
         if: ${{ env.HF_TOKEN == '' }}
         run: |
