@@ -13,7 +13,7 @@ tags:
   - formal-verification
   - lean4
   - slsa
-  - doi:10.5281/zenodo.19944926
+  - doi:10.5281/zenodo.24239896
 size_categories:
   - n<1K
 task_categories:
@@ -159,7 +159,7 @@ Per-organ fingerprints (SHA-256 of the public key) are pinned in `keys/MANIFEST.
 
 Part of the SZL Holdings *Ouroboros Thesis* (Governed Post-Determinism).
 
-Concept DOI (always-latest): [10.5281/zenodo.19944926](https://doi.org/10.5281/zenodo.19944926). Author: Stephen P. Lutar Jr. · [ORCID 0009-0001-0110-4173](https://orcid.org/0009-0001-0110-4173) · License CC-BY-4.0. Full DOI-pinned lineage and the paper index: [szl-papers PAPERS_INDEX](https://github.com/szl-holdings/szl-papers/blob/main/PAPERS_INDEX.md).
+Concept DOI (always-latest): [10.5281/zenodo.24239896](https://doi.org/10.5281/zenodo.24239896). Author: Stephen P. Lutar Jr. · [ORCID 0009-0001-0110-4173](https://orcid.org/0009-0001-0110-4173) · License CC-BY-4.0. Full DOI-pinned lineage and the paper index: [szl-papers PAPERS_INDEX](https://github.com/szl-holdings/szl-papers/blob/main/PAPERS_INDEX.md).
 
 Honesty (Doctrine v11): Λ unconditional uniqueness is **Conjecture 1** (machine-checked false as stated), never a theorem; conditional uniqueness is **Theorem U** (axiom-free). Locked-proven formulas are **exactly 8** {F1,F4,F7,F11,F12,F18,F19,F22}; experimental theorems are a separate CI-green tier; Khipu BFT safety is Conjecture 2. Trust never 100%.
 
@@ -170,7 +170,7 @@ Honesty (Doctrine v11): Λ unconditional uniqueness is **Conjecture 1** (machine
   year         = {2026},
   publisher    = {Hugging Face},
   doi          = {10.5281/zenodo.20434276},
-  note         = {Concept DOI: 10.5281/zenodo.19944926. Doctrine v11 LOCKED 749/14/163.},
+  note         = {Concept DOI: 10.5281/zenodo.24239896. Doctrine v11 LOCKED 749/14/163.},
   url          = {https://huggingface.co/datasets/SZLHOLDINGS/szl-lake}
 }
 ```
