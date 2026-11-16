@@ -63,6 +63,10 @@ SCHEMA = "szl.khipu.receipt/v1"
 #                            #3, added with the 5->8 lock growth on 2026-06-10):
 #                            anchors the kernel meta-invariants locked_count_eight,
 #                            conjecture1_still_open, theoremU_excluded_from_locked.
+#   estate-benchmark-anchor — estate-benchmark PINNED-BASELINE snapshot
+#                            anchor (chain #4, appended 2026-11-15 by lane PR
+#                            #102; this allowlist lagged and the 2026-11-16 daily
+#                            verify caught it - see rolling incident #4).
 # Each receipt is still verified against its OWN embedded signing.predicate_type /
 # Fulcio identity below — this allowlist only gates which receipt KINDS may appear
 # in the chain, and deliberately rejects any unknown kind rather than waving it
@@ -73,6 +77,7 @@ ALLOWED_KINDS = (
     "conjecture-disclosure-anchor",
     "locked-baseline",
     "locked-baseline-anchor",
+    "estate-benchmark-anchor",
 )
 GH_OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 
