@@ -20,7 +20,7 @@ def main() -> None:
     installed = distribution("szl-lake")
     for name in (
         "szl_lake_client", "szl_lake_query", "szl_lake_receipt",
-        "szl_lake_server", "szl_lake_store",
+        "szl_lake_sql", "szl_lake_server", "szl_lake_store",
     ):
         module = importlib.import_module(name)
         expected = Path(installed.locate_file(name + ".py")).resolve()
@@ -59,6 +59,13 @@ def main() -> None:
                 assert verified.json()["ok"] is True
                 assert verified.json()["count"] == 1
                 assert verified.json()["chain_head"] == first_head
+                sql = client.get(API_PREFIX + "/sql/summary")
+                assert sql.status_code == 200 and sql.json()["rows_matching_filter"] == 1
+                assert sql.json()["state"] == "LOCAL_CHAIN_VALIDATED"
+                assert sql.json()["groups"][0]["decision_counts"] == {"OTHER": 1}
+                html = client.get("/sql")
+                assert html.status_code == 200 and b"SQL evidence summary" in html.content
+                assert "script-src 'none'" in html.headers["content-security-policy"]
 
                 # Damage only the disposable fixture; the installed HTTP API must fail closed.
                 partition = Path(root) / fixture["organ"] / "2026-01-01.ndjson"
@@ -67,6 +74,7 @@ def main() -> None:
                 response = client.get(API_PREFIX + "/receipts", params={"organ": fixture["organ"]})
                 assert response.status_code == 503, response.text
                 assert response.json()["error"] == "ledger_corrupted"
+                assert client.get(API_PREFIX + "/sql/summary").status_code == 503
                 assert partition.read_bytes() == damaged
         finally:
             app.state.ledger = None

@@ -25,6 +25,7 @@ FIRST_PARTY = frozenset({
     "szl_lake_client",
     "szl_lake_query",
     "szl_lake_receipt",
+    "szl_lake_sql",
     "szl_lake_server",
     "szl_lake_store",
 })
