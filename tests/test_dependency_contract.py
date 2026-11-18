@@ -23,6 +23,7 @@ SERVE_IMPORTS = {
 }
 FIRST_PARTY = frozenset({
     "szl_lake_client",
+    "szl_lake_graph",
     "szl_lake_query",
     "szl_lake_receipt",
     "szl_lake_sql",
@@ -117,6 +118,23 @@ def test_server_imports_are_named_by_the_serve_extra():
 def test_serve_extra_names_fastapi_and_uvicorn():
     named = {_dist_name(item) for item in serve_requirements(PYPROJECT.read_text(encoding="utf-8"))}
     assert named == {"fastapi", "uvicorn"}
+
+
+def test_graph_is_declared_as_packaged_first_party_not_a_hidden_external_dependency():
+    """A first-party allowlist entry only qualifies when its source and wheel input exist."""
+    assert "szl_lake_graph" in FIRST_PARTY
+    assert (REPO_ROOT / "szl_lake_graph.py").is_file()
+    pyproject = PYPROJECT.read_text(encoding="utf-8")
+    assert re.search(r'^\s*"szl_lake_graph",\s*$', pyproject, re.MULTILINE)
+    source = SERVER.read_text(encoding="utf-8")
+    assert ("szl_lake_graph",) == tuple(
+        {name for name, _ in server_imports(source) if name == "szl_lake_graph"}
+    )
+    # Foreign imports, even after a stdlib or first-party name, still fail.
+    assert any(
+        "unreviewed_network_sdk" in problem
+        for problem in contract_problems(source + "\nimport szl_lake_graph, unreviewed_network_sdk\n", pyproject)
+    )
 
 
 def test_negative_control_dropped_extra_fails():
