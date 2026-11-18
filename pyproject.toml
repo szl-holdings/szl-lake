@@ -21,7 +21,9 @@ serve = [
 py-modules = [
   "szl_lake_client",
   "szl_lake_graph",
+  "szl_lake_hier",
   "szl_lake_query",
+  "szl_lake_rag",
   "szl_lake_receipt",
   "szl_lake_sql",
   "szl_lake_server",
