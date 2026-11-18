@@ -26,10 +26,12 @@ Apache-2.0 — SZL Holdings 2026.
 from __future__ import annotations
 
 import json
+import os
 
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse, Response
 
+from szl_lake_graph import GraphProjectionUnavailable, project as project_evidence_graph, render_html as render_graph_html
 from szl_lake_sql import SqlProjectionUnavailable, render_html, summarize
 from szl_lake_store import (
     LedgerCorruptionError,
@@ -254,6 +256,62 @@ async def sql_dashboard(request: Request, organ: str | None = Query(default=None
             "frame-ancestors 'none'"
         ),
     })
+
+
+# The graph is a read-only local presentation derived from the exact SQL
+# summary. Off by default: configuring a public network endpoint additionally
+# requires independent access/privacy review. Never read source on a disabled
+# request, and never infer signature or production authorization from HTTP 200.
+_GRAPH_HEADERS = {**_SQL_HEADERS, "X-Robots-Tag": "noindex"}
+
+
+def _graph_summary(request: Request, organ: str | None):
+    if os.environ.get("SZL_LAKE_GRAPH_READONLY") != "1":
+        return JSONResponse(
+            {"state": "UNAVAILABLE", "code": "FEATURE_NOT_ADMITTED"},
+            status_code=503, headers=_GRAPH_HEADERS,
+        )
+    if (set(request.query_params.keys()) - {"organ"}
+            or len(request.query_params.getlist("organ")) > 1):
+        return JSONResponse(
+            {"state": "INVALID_REQUEST", "code": "UNSUPPORTED_QUERY_PARAMETER"},
+            status_code=400, headers=_GRAPH_HEADERS,
+        )
+    snapshot = _sql_summary(request, organ)
+    if isinstance(snapshot, JSONResponse):
+        snapshot.headers["X-Robots-Tag"] = "noindex"
+        return snapshot
+    try:
+        return project_evidence_graph(snapshot)
+    except GraphProjectionUnavailable as exc:
+        return JSONResponse(
+            {"state": "UNAVAILABLE", "code": str(exc)},
+            status_code=503, headers=_GRAPH_HEADERS,
+        )
+
+
+@app.get(API_PREFIX + "/graph/summary")
+async def get_graph_summary(request: Request, organ: str | None = Query(default=None)):
+    result = _graph_summary(request, organ)
+    return (result if isinstance(result, JSONResponse)
+            else JSONResponse(result, headers=_GRAPH_HEADERS))
+
+
+@app.get("/graph")
+async def graph_dashboard(request: Request, organ: str | None = Query(default=None)):
+    result = _graph_summary(request, organ)
+    if isinstance(result, JSONResponse):
+        return result
+    return Response(
+        render_graph_html(result), media_type="text/html", headers={
+            **_GRAPH_HEADERS, "Referrer-Policy": "no-referrer",
+            "Content-Security-Policy": (
+                "default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; "
+                "object-src 'none'; base-uri 'none'; form-action 'none'; "
+                "frame-ancestors 'none'"
+            ),
+        },
+    )
 
 
 if __name__ == "__main__":

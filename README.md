@@ -145,6 +145,33 @@ a deployed server or production receipt ingestion.
 | `GET /api/lake/v1/health` | Store reachable, total receipts, per-organ counts. |
 | `GET /api/lake/v1/sql/summary?organ=` | Fixed, parameterized SQLite-in-memory aggregation over current validated ledger receipts; never accepts raw SQL or writes source data. |
 | `GET /sql` | Python-rendered, zero-JavaScript, read-only SQL evidence table and explicit provenance boundary. |
+| `GET /api/lake/v1/graph/summary?organ=` | **Opt-in only** read-only source-bound evidence graph: typed snapshot/organ/decision nodes and count edges, with local chain heads and unsigned SHA3 checksum. Default 503 HOLD. |
+| `GET /graph` | **Opt-in only** accessible, zero-JavaScript graph evidence table. HTML is not a 3D simulation or issuer verification. Default 503 HOLD. |
+
+### Source-bound evidence graph (source candidate; disabled by default)
+
+`szl_lake_graph.py` maps the **same complete, validated SQL snapshot** into a
+bounded, typed read-only graph. It reuses the existing ledger and its SQLite
+projection instead of introducing a duplicate authority or graph database.
+The graph contains aggregate source/organ/decision nodes and
+`AGGREGATED_FROM` count edges, not raw receipt data. It carries the exact
+source/selected denominators, local per-organ chain heads and a deterministic
+**unsigned** SHA3-256 checksum. Organ-level empirical fractions and Shannon
+entropy are descriptive statistics, not correctness probabilities, signed
+provenance, causal estimates or effect authorization.
+
+Both new GET routes require the **exact** local
+`SZL_LAKE_GRAPH_READONLY=1` opt-in and are otherwise HTTP **503
+FEATURE_NOT_ADMITTED**, before any ledger read. This opt-in is **not**
+authentication: do not enable public access without a separately verified
+Access/tenant policy, privacy review and independently receipted runtime
+deployment. The HTML view uses accessible tables and a script-free CSP; a
+future Three.js/OpenUSD consumer may use the typed JSON but must preserve the
+same evidence and authorization boundaries.
+
+See [the equations, vendor research, schema, test cases, and release gates](docs/EVIDENCE_GRAPH_MATH_V1.md).
+No Cloudflare routing, Hugging Face publication, PyPI release, model training,
+wallet operation or checkpoint change is performed by this candidate.
 
 ### SQL analytics boundary (source candidate)
 
