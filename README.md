@@ -143,6 +143,31 @@ a deployed server or production receipt ingestion.
 | `GET /api/lake/v1/chain/head?organ=` | Current Khipu chain head + count for an organ (for cross-component verification). |
 | `GET /api/lake/v1/chain/verify?organ=` | Re-derive an organ's Khipu chain straight from disk and report tamper-evidence: `{ok, count, chain_head, chain_index, broken:[…]}`. Detects invalid committed fields, broken links/indices, insertion, and re-ordering. A self-consistent shortened or rehashed chain needs a trusted prior head to establish historical rollback. Returns HTTP 200 even when `ok` is `false` (a detected break is a valid result, not a request error). |
 | `GET /api/lake/v1/health` | Store reachable, total receipts, per-organ counts. |
+| `GET /api/lake/v1/sql/summary?organ=` | Fixed, parameterized SQLite-in-memory aggregation over current validated ledger receipts; never accepts raw SQL or writes source data. |
+| `GET /sql` | Python-rendered, zero-JavaScript, read-only SQL evidence table and explicit provenance boundary. |
+
+### SQL analytics boundary (source candidate)
+
+The standard-library `szl_lake_sql.py` projects a **complete, validated local
+receipt snapshot** into a per-request `sqlite3.connect(":memory:")` database.
+Its SQL queries are fixed and use bound parameters for the optional `organ`
+filter; users cannot submit SQL, filesystem paths, arbitrary URLs, dataset
+identities, or signer credentials. Neither the projection nor the Python HTML
+view writes NDJSON, mints receipts, calls an upstream provider, or persists an
+alternate authority. Only organ/day/allowlisted decision counts appear in the
+result: receipt bodies and unclassified decision text do not.
+
+Source readback is bounded at 10,000 total receipts and 128 organs. Corruption,
+over-limit data, incomplete results, or a changed chain head/count between the
+pre/post checks return HTTP 503 **without partial successes**. An empty ledger
+is `EMPTY`, not operational evidence. The chain remains locally hash-verified;
+this is *not* independent non-equivocation or DSSE signature verification.
+
+This is a source/CI feature until released and independently checked against
+the deployed runtime. It is not a replacement for Neon PostgreSQL, and the
+in-memory SQL engine does not make the HTTP server a multi-tenant query service.
+If future throughput needs a persistent analytical index, establish migration,
+checkpoint binding, replay, and rollback evidence before switching the owner.
 
 JSON object keys must be unique at every nesting level, including escaped
 spellings of the same key. Ambiguous JSON objects, arrays, and NDJSON requests

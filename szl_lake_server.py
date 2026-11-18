@@ -28,8 +28,9 @@ from __future__ import annotations
 import json
 
 from fastapi import FastAPI, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
+from szl_lake_sql import SqlProjectionUnavailable, render_html, summarize
 from szl_lake_store import (
     LedgerCorruptionError,
     LedgerLockTimeout,
@@ -199,6 +200,60 @@ async def get_health(request: Request):
         return led.health()
     except LedgerLockTimeout as e:
         return _unavailable(e)
+
+
+# SQL is an ephemeral, fixed-query display over owner-validated NDJSON. Neither
+# this GET path nor its Python-rendered UI mutates the ledger or signs receipts.
+_SQL_HEADERS = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
+
+
+def _sql_summary(request: Request, organ: str | None):
+    if set(request.query_params.keys()) - {"organ"}:
+        return JSONResponse(
+            {"state": "INVALID_REQUEST", "code": "UNSUPPORTED_QUERY_PARAMETER"},
+            status_code=400, headers=_SQL_HEADERS,
+        )
+    try:
+        return summarize(_ledger(request), organ=organ)
+    except ValueError:
+        return JSONResponse(
+            {"state": "INVALID_REQUEST", "code": "ORGAN_INVALID"},
+            status_code=400, headers=_SQL_HEADERS,
+        )
+    except SqlProjectionUnavailable as exc:
+        return JSONResponse(
+            {"state": "UNAVAILABLE", "code": str(exc)},
+            status_code=503, headers=_SQL_HEADERS,
+        )
+    except (LedgerCorruptionError, LedgerLockTimeout):
+        return JSONResponse(
+            {"state": "UNAVAILABLE", "code": "LEDGER_CORRUPTED_OR_LOCKED"},
+            status_code=503, headers=_SQL_HEADERS,
+        )
+
+
+@app.get(API_PREFIX + "/sql/summary")
+async def get_sql_summary(request: Request, organ: str | None = Query(default=None)):
+    result = _sql_summary(request, organ)
+    return (result if isinstance(result, JSONResponse)
+            else JSONResponse(result, headers=_SQL_HEADERS))
+
+
+@app.get("/sql")
+async def sql_dashboard(request: Request, organ: str | None = Query(default=None)):
+    result = _sql_summary(request, organ)
+    if isinstance(result, JSONResponse):
+        return result
+    content = render_html(result)
+    return Response(content, media_type="text/html", headers={
+        **_SQL_HEADERS,
+        "Referrer-Policy": "no-referrer",
+        "Content-Security-Policy": (
+            "default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; "
+            "object-src 'none'; base-uri 'none'; form-action 'none'; "
+            "frame-ancestors 'none'"
+        ),
+    })
 
 
 if __name__ == "__main__":
