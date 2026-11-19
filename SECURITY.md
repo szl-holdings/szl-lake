@@ -10,7 +10,7 @@
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
-Please report security vulnerabilities via email to **security@szlholdings.ai**.
+Please report security vulnerabilities via email to **security@szlholdings.com**.
 Include affected component, reproduction steps, and impact. We acknowledge within
 2 business days and aim to remediate or provide mitigation guidance within 30 days.
 
