@@ -21,8 +21,11 @@ stdlib + pytest + FastAPI TestClient.
 """
 from __future__ import annotations
 
+import io
+import json
 import os
 import sys
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -614,23 +617,27 @@ def test_finite_values_and_strings_still_round_trip(client):
 
 
 
-def test_client_validates_real_server_acknowledgments(client, monkeypatch):
-    """Exercise real serialization, HTTP handlers, ledger and acknowledgment."""
-    import io
-    from types import SimpleNamespace
-    c, led = client
+def _route_client_to_fixture(c, monkeypatch, reply=None):
+    """Send actual client bytes through the in-process ASGI app, never a socket."""
     calls = []
 
     def post(request, timeout):
-        calls.append(request.data)
         response = c.post(request.full_url, content=request.data, headers=dict(request.header_items()))
-        stream = io.BytesIO(response.content)
+        calls.append(response)
+        stream = io.BytesIO(response.content if reply is None else reply(response))
         stream.status = response.status_code
         stream.headers = response.headers
         return stream
 
     monkeypatch.setattr(szl_lake_client.urllib.request, "build_opener",
                         lambda *_handlers: SimpleNamespace(open=post))
+    return calls
+
+
+def test_client_validates_real_server_acknowledgments(client, monkeypatch):
+    """Exercise real serialization, HTTP handlers, ledger and acknowledgment."""
+    c, led = client
+    calls = _route_client_to_fixture(c, monkeypatch)
     receipt = {"organ": " Test ", "value": "λ", "nested": {1: "normalized on wire"}}
     first = szl_lake_client.emit_receipt(receipt, base_url="http://testserver")
     duplicate = szl_lake_client.emit_receipt(receipt, base_url="http://testserver")
@@ -651,21 +658,8 @@ def test_client_validates_real_server_acknowledgments(client, monkeypatch):
 
 
 def test_client_failed_batch_keeps_delivery_unknown_without_retry(client, monkeypatch):
-    import io
-    from types import SimpleNamespace
     c, led = client
-    calls = []
-
-    def post(request, timeout):
-        calls.append(request.data)
-        response = c.post(request.full_url, content=request.data, headers=dict(request.header_items()))
-        stream = io.BytesIO(response.content)
-        stream.status = response.status_code
-        stream.headers = response.headers
-        return stream
-
-    monkeypatch.setattr(szl_lake_client.urllib.request, "build_opener",
-                        lambda *_handlers: SimpleNamespace(open=post))
+    calls = _route_client_to_fixture(c, monkeypatch)
     result = szl_lake_client.emit_batch(
         [make_receipt("stored", organ="test"), make_receipt("bad", organ="../escape")],
         base_url="http://testserver")
@@ -676,6 +670,52 @@ def test_client_failed_batch_keeps_delivery_unknown_without_retry(client, monkey
     # The first receipt really committed before the later rejection. Reporting
     # NOT_SENT, zero writes or retrying the whole batch blindly would be false.
     assert led.chain_head("test")["count"] == 1
+
+
+@pytest.mark.parametrize("fault", ["timeout_after_prefix", "incomplete_200"])
+def test_caller_reconciles_ambiguous_batch_against_reopened_store(client, monkeypatch, fault):
+    c, led = client
+    submitted = [make_receipt(rid, organ="test") for rid in ("first", "middle", "last")]
+    if fault == "timeout_after_prefix":
+        # The middle ID exists with a different body. The real server will
+        # store the first row, reject the conflict, and never reach the last.
+        led.append(dict(submitted[1], decision="HOLD"))
+
+    def ambiguous_reply(response):
+        if fault == "timeout_after_prefix":
+            raise TimeoutError("injected: response lost after handler completed")
+        # All writes happened, but only the first item's acknowledgment got
+        # through in an otherwise well-formed, internally consistent HTTP 200.
+        return json.dumps({"total": 1, "accepted": 1, "duplicates": 0,
+                           "results": response.json()["results"][:1]}).encode()
+
+    calls = _route_client_to_fixture(c, monkeypatch, ambiguous_reply)
+    result = szl_lake_client.emit_batch(submitted, base_url="http://testserver")
+    assert [r.status_code for r in calls] == ([400] if fault == "timeout_after_prefix" else [200])
+    assert result["ok"] is False and result["delivery_state"] == "UNKNOWN"
+    if fault == "incomplete_200":
+        assert result["status"] == 200 and "does not bind" in result["reason"]
+    else:
+        assert "TimeoutError" in result["reason"]
+
+    # Operator readback, NOT a client retry. No concurrent writes in this
+    # fixture; absence is meaningful only for a complete, validated snapshot.
+    recovered = ReceiptLedger(led.root)
+    report = recovered.verify_chain("test")
+    assert report["ok"] is True
+    rows = recovered.query(organ="test", limit=0)
+    assert len(rows) == report["count"]
+    digests = {(row["organ"], row["receipt_id"]): row["receipt_body_hash"] for row in rows}
+    observed = []
+    for body in submitted:
+        digest = digests.get((body["organ"], body["id"]))
+        observed.append("absent" if digest is None else
+                        "match" if digest == canonical_hash(body) else "conflict")
+    if fault == "timeout_after_prefix":
+        assert observed == ["match", "conflict", "absent"]
+    else:
+        assert observed == ["match", "match", "match"]
+    assert len(calls) == 1
 
 if __name__ == "__main__":
     sys.exit(pytest.main([os.path.abspath(__file__), "-q"]))

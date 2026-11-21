@@ -123,6 +123,49 @@ def test_clean_restart_resumes_the_same_chain(tmp_path):
     assert ReceiptLedger(root).chain_head(ORGAN) == second.chain_head(ORGAN)
 
 
+@pytest.mark.parametrize(("history", "prefix_matches"), [
+    ("unchanged", True), ("extension", True), ("shorter", False),
+    ("same_length_fork", False), ("longer_fork", False),
+])
+def test_cold_restart_against_independently_retained_head(tmp_path, history, prefix_matches):
+    root, path, led = seeded(tmp_path, n=2)
+    # The caller retains this tuple OUTSIDE the recovered store. A head
+    # reread from the restored partitions would make the check circular.
+    trusted = led.chain_head(ORGAN)
+    if history == "shorter":
+        path.write_bytes(read_lines(path)[0])
+    elif history.endswith("fork"):
+        other = ReceiptLedger(str(tmp_path / "alternative"))
+        other.append(receipt(1))
+        other.append(receipt(20))
+        if history == "longer_fork":
+            other.append(receipt(30))
+        path.write_bytes((tmp_path / "alternative" / ORGAN / path.name).read_bytes())
+    elif history == "extension":
+        led.append(receipt(3))
+
+    before = snapshot(root)
+    # Fresh interpreter, no prior observations. The disposable copy is
+    # quiescent for both reads. limit=0 requests all validated envelopes.
+    probe = """
+import json, sys
+from szl_lake_store import ReceiptLedger
+ledger, organ = ReceiptLedger(sys.argv[1]), sys.argv[2]
+print(json.dumps([ledger.verify_chain(organ), ledger.query(organ=organ, limit=0)]))
+"""
+    report, rows = json.loads(subprocess.check_output(
+        [sys.executable, "-B", "-c", probe, root, trusted["organ"]],
+        cwd=REPO, timeout=15,
+    ))
+    assert report["ok"] is True and report["broken"] == []  # even for a valid fork
+    assert report["count"] == report["chain_index"] == len(rows)
+    assert report["organ"] == trusted["organ"] and report["chain_alg"] == trusted["chain_alg"]
+    at_index = [r["chain_hash"] for r in rows
+                if r["organ"] == trusted["organ"] and r["chain_index"] == trusted["chain_index"]]
+    assert (at_index == [trusted["chain_head"]]) is prefix_matches
+    assert snapshot(root) == before
+
+
 def test_legacy_crlf_partition_still_recovers(tmp_path):
     # Text-mode writes on Windows produced CRLF line endings; those ledgers
     # are valid and must keep recovering and accepting appends.
