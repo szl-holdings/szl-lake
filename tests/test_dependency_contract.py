@@ -115,9 +115,9 @@ def test_server_imports_are_named_by_the_serve_extra():
     assert problems == []
 
 
-def test_serve_extra_names_fastapi_and_uvicorn():
+def test_serve_extra_names_server_imports_and_starlette_security_floor():
     named = {_dist_name(item) for item in serve_requirements(PYPROJECT.read_text(encoding="utf-8"))}
-    assert named == {"fastapi", "uvicorn"}
+    assert named == {"fastapi", "starlette", "uvicorn"}
 
 
 def test_graph_is_declared_as_packaged_first_party_not_a_hidden_external_dependency():

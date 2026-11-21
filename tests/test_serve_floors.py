@@ -3,9 +3,8 @@
 Standard library only. Exercises scripts/serve_floors.py, which the serve-floors
 workflow runs, with negative controls, and pins that workflow's wiring so the
 floors job cannot be removed, skipped, made non-blocking or path-filtered.
-fastapi 0.110.0 resolves starlette 0.36.3, whose TestClient passes the `app`
-argument that httpx 0.28 removed; starlette 0.37.2 (first allowed by fastapi
-0.110.1) dropped it, so the declared fastapi floor must stay at 0.110.1 or later.
+The Starlette floor applies even if a caller already has an older install.
+FastAPI's floor must be able to resolve with it.
 """
 from __future__ import annotations
 
@@ -26,8 +25,8 @@ INSTALL_STEP = (
     '          python -m pip install ".[serve]" pytest httpx -c "$RUNNER_TEMP/serve-floors.txt"\n'
     "          python -m pip check\n"
     "          python scripts/serve_floors.py verify\n"
-    "      - name: Exercise the existing suite at the floors\n"
-    "        run: python -m pytest -q tests\n"
+    "      - name: Exercise the README suites at the floors (report optional skips)\n"
+    "        run: python -m pytest -q -rs tests scripts/test_lake_ledger.py scripts/test_lake_receipt_spine.py\n"
     "      - name: Verify the installed server at the floors outside the checkout\n"
     "        working-directory: ${{ runner.temp }}\n"
     '        run: python -I "$GITHUB_WORKSPACE/scripts/check_installed_server.py"\n'
@@ -44,10 +43,11 @@ def _load_helper():
 serve_floors = _load_helper()
 
 
-def test_current_pyproject_declares_bare_floors_above_the_testclient_break():
+def test_current_pyproject_declares_compatible_http_security_floors():
     declared = serve_floors.floors((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    assert set(declared) == {"fastapi", "uvicorn"}
-    assert serve_floors.release(declared["fastapi"]) >= (0, 110, 1)
+    assert set(declared) == {"fastapi", "starlette", "uvicorn"}
+    assert serve_floors.release(declared["fastapi"]) >= (0, 133)
+    assert serve_floors.release(declared["starlette"]) >= (1, 3, 1)
 
 
 @pytest.mark.parametrize(

@@ -33,11 +33,5 @@ jobs:
       - name: Verify signed receipts and subject and digest bindings
         run: |
           # Fail if the optional library cannot import; do not silently skip.
-          python -c "import szl_receipt"
-          python -m pytest scripts/test_lake_receipt_spine.py -q
-      - name: Ledger chain integrity (scripts suite under CI)
-        run: |
-          # test_lake_ledger.py previously ran in NO workflow; it drifted from
-          # the v2 link upgrade undetected. Keep it under CI from now on.
-          python -m pip install ".[serve]" httpx
-          python -m pytest scripts/test_lake_ledger.py -q
+          python -c "import szl_receipt; from importlib.metadata import version; print('Required receipt spine:', version('szl-receipt-dsse'))"
+          python -m pytest -q -rs scripts/test_lake_receipt_spine.py
