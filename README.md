@@ -103,7 +103,7 @@ curl -fsSL \
 
 ## Unified Receipt Ledger
 
-The **one durable ledger** every SZL component POSTs governance receipts to.
+The ledger provides a common on-disk append target for governance receipts.
 Previously each organ (ouroboros, hatun-mcp, szl-router, szl-mesh, vsp-otel,
 szl-trust, a11oy …) held receipts in an in-process silo that never converged,
 and `szl_lake_query.py` returned a stub. This is the real ingest + query path.
@@ -112,7 +112,7 @@ and `szl_lake_query.py` returned a stub. This is the real ingest + query path.
 
 | File | Role |
 |---|---|
-| `szl_lake_store.py` | Durable, append-only, hash-chained NDJSON store (`ReceiptLedger`). Restart-safe — all state is rebuilt from disk, never an in-memory map that resets, and every record is re-validated (index, prev-hash link, recomputed hash, body identity) before an append is admitted. A corrupted organ chain fails closed: appends are refused with `LedgerCorruptionError` naming the first bad line, and the corrupt bytes are left untouched. Writers sharing one store root serialize on a per-organ OS lock file (`<organ>/.writer.lock`). |
+| `szl_lake_store.py` | Append-only, hash-chained NDJSON store (`ReceiptLedger`). A restart rebuilds state from the available partitions; it does not remember the last head. Every record is re-validated (index, prev-hash link, recomputed hash, body identity) before an append is admitted. A corrupted organ chain fails closed: appends are refused with `LedgerCorruptionError` naming the first bad line, and the corrupt bytes are left untouched. Writers sharing one store root serialize on a per-organ OS lock file (`<organ>/.writer.lock`). |
 | `szl_lake_server.py` | FastAPI service exposing the ingest + query API. |
 | `szl_lake_client.py` | Best-effort synchronous emitter with receipt-bound sink acknowledgments; callers must inspect the result. |
 | `szl_lake_query.py` | `query_receipts(...)` now reads the real store (stub path replaced for receipts; `LakeQuery` kept importable for back-compat). |
@@ -238,15 +238,69 @@ identity-only scope. Direct reads of a remembered removed organ
 preserve its observation/corruption; `health()` still lists only directories
 currently on disk. HTTP event-loop lock responsiveness is unchanged.
 
-Recovery and query regression checks (temporary stores only):
+### Recovery against a trusted prior head
+
+Before accepting a restore, keep its writers stopped and work on a stable
+copy. Obtain the prior `(organ, chain_alg, chain_index, chain_head)` from a
+trusted record retained independently of that copy. A head fetched from the
+restored server is not an independent reference.
+
+- **Validate the copy:** Open the explicit copy root with `ReceiptLedger(root)`.
+  Require `verify_chain(organ)["ok"] is True` and a successful validated read
+  (`query(organ=organ, limit=0)` returns all envelopes). HTTP 200 from
+  `chain/verify` can also mean that verification completed and found a break.
+- **Compare at the prior index:** Require the same organ and algorithm. For a
+  nonempty prior head, require exactly one envelope at the trusted index and
+  compare its `chain_hash` with the trusted `chain_head`. A longer valid
+  extension can have a different tip and still contain this prefix. A shorter
+  copy, a different hash at that position, an incomplete read, or a missing
+  trusted record is not evidence of continuity: hold and preserve the copy.
+  An empty checkpoint cannot establish any nonempty historical prefix.
+- **Limit the claim:** A match establishes continuity through that index for
+  fields committed by the chain; it does not rule out loss after the checkpoint.
+  A v2 link commits to the full canonical receipt body. A v1 link with an
+  explicit ID does not. Neither result authenticates an issuer. The optional
+  read-only graph is a projection, not an authentication mechanism.
+
+A successful file `fsync` and a clean reopen of a temporary store are not
+production durability tests. That claim needs separate evidence for the
+deployed volume, crash/power-loss behavior, backups, and an independently
+checked restore against the required recovery point. A sink acknowledgment
+or a matching head alone supplies none of those.
+
+### Running the recovery checks
+
+Use a disposable checkout and virtual environment. The following reproduces
+the supported-latest rail; it resolves compatible releases for that interpreter
+rather than locking library consumers:
 
 ```bash
-python -m pytest -q tests scripts/test_lake_ledger.py scripts/test_lake_receipt_spine.py
+python -m pip install --upgrade --upgrade-strategy eager ".[serve]" pytest httpx
+python -m pip check
+python -m pytest -q -rs tests scripts/test_lake_ledger.py scripts/test_lake_receipt_spine.py
 ```
 
-The HTTP tests require FastAPI/TestClient; the optional receipt-spine suite
-skips when `szl_receipt` is absent. A successful run of `tests/` alone does not
-establish that the `scripts/` suites ran.
+The [floor rail](.github/workflows/serve-floors.yml) and the
+[supported-latest rail](.github/workflows/installed-server-ci.yml) run this
+test collection and an isolated, installed-package smoke on Python 3.10 and
+3.12. The floor rail fixes each direct `serve` requirement at its declared
+minimum and verifies the installed versions; transitive dependencies still
+resolve normally. `starlette>=1.3.1` keeps older Starlette versions out of the
+HTTP extra ([upstream fixes](https://starlette.dev/release-notes/)); no HTTP
+dependency is required for the base ledger.
+
+Without `szl_receipt`, pytest reports why the optional spine module skipped.
+To exercise the signing tests, run:
+
+```bash
+python -m pip install -r requirements-attest.txt
+python -m pytest -q -rs scripts/test_lake_receipt_spine.py
+```
+
+The [required-spine lane](.github/workflows/lake-receipt-spine.yml) also imports and prints the
+installed library version before running that suite by itself. Tests use
+synthetic temporary ledgers; discard the disposable checkout, environment
+and pytest temporary directory after the run. No dataset or service is needed.
 
 ### `SZL_RECEIPT_SINK` wire contract
 
@@ -282,6 +336,20 @@ invalid local input, `UNKNOWN` after a failed or ambiguous attempt, and
 `SINK_ACKNOWLEDGED` only after the contract passes. A timeout or HTTP rejection
 can follow a partial batch write; `UNKNOWN` does not mean zero writes. There
 is no automatic retry, background worker, durable queue or redirect following.
+
+For an ambiguous batch, retain the original serialized receipts. Reconcile
+them individually against a stable, fully validated copy for each organ, not
+the count in a partial response or the latest page of results. For v2, match
+the normalized organ, receipt identity and canonical SHA3-256 body digest:
+
+- **Same identity and body:** Present in that copy; do not submit again on
+  the strength of a missing acknowledgment.
+- **Same identity, different body:** Conflict. Hold for investigation; do not
+  overwrite or retry with a changed body.
+- **No matching identity:** Absent from this complete snapshot, not proof it
+  was never delivered. If the original request may still be running or the
+  view is incomplete, keep delivery unknown. Only the caller's authorized
+  policy can decide whether to submit a missing item again.
 
 The call is **synchronous**, not non-blocking. The socket-operation timeout
 defaults to `1.5s` (override with `$SZL_RECEIPT_TIMEOUT` or the argument); it is
